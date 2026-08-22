@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include "webhandlers.h"
 #include "index_html.h"
+
+
 //Роути для налаштауваня модуля на з'єднання
 // ==========================================
 // 🔍 Читання збережених WiFi даних
@@ -113,3 +115,27 @@ void handleControlPage() {
   server.send_P(200, "text/html", CONTROL_PAGE_HTML);
 }
 
+// ==========================================
+// 🎨 Сторінка Pixel Art Studio
+// ==========================================
+void handlePixelArtPage() {
+  server.send_P(200, "text/html", PIXEL_ART_HTML);
+  delay(100);
+}
+
+// ==========================================
+//  Отримання даних Pixel Art
+// ==========================================
+void handlePixelArtData() {
+  if (!server.hasArg("plain")) {
+    server.send(400, "text/plain", "No data");
+    return;
+  }
+  
+  String json = server.arg("plain");
+  Serial.println("🎨 Отримано Pixel Art дані: " + json);
+  
+  // Тут можна розпарсити JSON і встановити кольори на матриці
+  // Для простоти - просто підтверджуємо отримання
+  server.send(200, "text/plain", "OK");
+}

@@ -1157,4 +1157,308 @@ const char WIFI_PAGE_HTML[] PROGMEM = R"rawliteral(
 </html>
 )rawliteral";
 
+// ==========================================
+// 🎨 Pixel Art Studio
+// ==========================================
+const char PIXEL_ART_HTML[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESP32 • Pixel Art Studio</title>
+<style>
+  :root { 
+    --bg: #0a0e27; 
+    --card: rgba(15, 23, 42, 0.8); 
+    --accent: #00d4ff; 
+    --text: #f1f5f9; 
+    --muted: #64748b;
+    --border: rgba(255, 255, 255, 0.08);
+  }
+  
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  
+  body { 
+    font-family: -apple-system, 'Segoe UI', sans-serif; 
+    background: var(--bg); 
+    color: var(--text); 
+    min-height: 100vh; 
+    padding: 20px;
+  }
+  
+  .container { max-width: 600px; margin: 0 auto; }
+  
+  .header { text-align: center; margin-bottom: 30px; }
+  .header h1 { 
+    font-size: 32px; font-weight: 800; 
+    background: linear-gradient(135deg, #00d4ff, #ff00ff);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .subtitle { color: var(--muted); font-size: 14px; margin-top: 8px; }
+  
+  .card {
+    background: var(--card); backdrop-filter: blur(20px);
+    border: 1px solid var(--border); border-radius: 20px;
+    padding: 24px; margin-bottom: 20px;
+  }
+  
+  .card-title {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;
+    color: var(--muted); margin-bottom: 16px; font-weight: 700;
+  }
+  
+  /* Сітка малювання */
+  .canvas-container {
+    display: grid;
+    grid-template-columns: repeat(16, 1fr);
+    gap: 2px;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 8px;
+    border-radius: 12px;
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 30px rgba(0, 212, 255, 0.2);
+  }
+  
+  .pixel {
+    aspect-ratio: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 2px;
+    cursor: crosshair;
+    transition: transform 0.1s;
+  }
+  
+  .pixel:hover { transform: scale(1.2); z-index: 10; }
+  .pixel.active { box-shadow: 0 0 8px currentColor; }
+  
+  /* Палітра */
+  .palette {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 8px;
+    margin-top: 16px;
+  }
+  
+  .color {
+    aspect-ratio: 1;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.2s;
+  }
+  
+  .color:hover { transform: scale(1.1); }
+  .color.selected { border-color: #fff; box-shadow: 0 0 12px currentColor; }
+  
+  /* Інструменти */
+  .tools {
+    display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap;
+  }
+  
+  .tool-btn {
+    flex: 1; min-width: 80px; padding: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    border-radius: 10px; color: var(--text);
+    font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+  }
+  
+  .tool-btn:hover { background: rgba(0, 212, 255, 0.1); border-color: var(--accent); }
+  .tool-btn.active { background: var(--accent); color: #000; }
+  
+  /* Кнопки дій */
+  .actions {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 16px;
+  }
+  
+  .action-btn {
+    padding: 14px; background: linear-gradient(135deg, var(--accent), #8b5cf6);
+    border: none; border-radius: 10px; color: #000;
+    font-size: 14px; font-weight: 700; cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .action-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3); }
+  .action-btn:active { transform: translateY(0); }
+  .action-btn.danger { background: linear-gradient(135deg, #ef4444, #dc2626); }
+  
+  /* Статус */
+  .status {
+    padding: 12px; border-radius: 10px; margin-top: 16px;
+    text-align: center; font-size: 13px; font-weight: 600;
+    display: none;
+  }
+  .status.show { display: block; animation: slideIn 0.3s; }
+  .status.success { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+  .status.error { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+  
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎨 Pixel Art Studio</h1>
+      <div class="subtitle">Малюй на сітці 16x16 та відправляй на LED матрицю</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Полотно</div>
+      <div class="canvas-container" id="canvas"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Палітра</div>
+      <div class="palette" id="palette"></div>
+      
+      <div class="tools">
+        <button class="tool-btn active" data-tool="brush" onclick="setTool('brush')">🖌️ Пензлик</button>
+        <button class="tool-btn" data-tool="eraser" onclick="setTool('eraser')">🧹 Гумка</button>
+        <button class="tool-btn" data-tool="fill" onclick="setTool('fill')">🪣 Заповнити</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Дії</div>
+      <div class="actions">
+        <button class="action-btn" onclick="sendToLED()">📡 На матрицю</button>
+        <button class="action-btn danger" onclick="clearCanvas()">🗑️ Очистити</button>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+  </div>
+
+<script>
+const GRID_SIZE = 16;
+let currentColor = '#00d4ff';
+let currentTool = 'brush';
+let isDrawing = false;
+const pixels = [];
+
+// Палітра кольорів
+const colors = [
+  '#000000', '#ffffff', '#ff0000', '#00ff00',
+  '#0000ff', '#ffff00', '#ff00ff', '#00ffff',
+  '#ff8800', '#8800ff', '#00ff88', '#ff0088',
+  '#884400', '#440088', '#008844', '#880044'
+];
+
+// Ініціалізація
+function init() {
+  const canvas = document.getElementById('canvas');
+  const palette = document.getElementById('palette');
+  
+  // Створення сітки
+  for (let y = 0; y < GRID_SIZE; y++) {
+    for (let x = 0; x < GRID_SIZE; x++) {
+      const pixel = document.createElement('div');
+      pixel.className = 'pixel';
+      pixel.dataset.x = x;
+      pixel.dataset.y = y;
+      
+      pixel.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        isDrawing = true;
+        paintPixel(pixel);
+      });
+      
+      pixel.addEventListener('mouseenter', () => {
+        if (isDrawing) paintPixel(pixel);
+      });
+      
+      canvas.appendChild(pixel);
+      pixels.push(pixel);
+    }
+  }
+  
+  document.addEventListener('mouseup', () => isDrawing = false);
+  
+  // Створення палітри
+  colors.forEach((color, i) => {
+    const colorDiv = document.createElement('div');
+    colorDiv.className = 'color' + (i === 0 ? ' selected' : '');
+    colorDiv.style.background = color;
+    colorDiv.onclick = () => selectColor(color, colorDiv);
+    palette.appendChild(colorDiv);
+  });
+}
+
+function selectColor(color, element) {
+  currentColor = color;
+  document.querySelectorAll('.color').forEach(c => c.classList.remove('selected'));
+  element.classList.add('selected');
+}
+
+function setTool(tool) {
+  currentTool = tool;
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`[data-tool="${tool}"]`).classList.add('active');
+}
+
+function paintPixel(pixel) {
+  if (currentTool === 'brush') {
+    pixel.style.background = currentColor;
+    pixel.style.color = currentColor;
+  } else if (currentTool === 'eraser') {
+    pixel.style.background = 'rgba(255, 255, 255, 0.05)';
+    pixel.style.color = 'transparent';
+  } else if (currentTool === 'fill') {
+    pixels.forEach(p => {
+      p.style.background = currentColor;
+      p.style.color = currentColor;
+    });
+  }
+}
+
+function clearCanvas() {
+  pixels.forEach(p => {
+    p.style.background = 'rgba(255, 255, 255, 0.05)';
+    p.style.color = 'transparent';
+  });
+  showStatus('Полотно очищено', 'success');
+}
+
+async function sendToLED() {
+  const pixelData = [];
+  pixels.forEach(p => {
+    const color = p.style.background || 'rgba(255, 255, 255, 0.05)';
+    pixelData.push(color);
+  });
+  
+  showStatus('Відправка на матрицю...', 'success');
+  
+  try {
+    const res = await fetch('/api/pixel_art', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pixels: pixelData })
+    });
+    
+    if (res.ok) {
+      showStatus('✅ Надіслано на LED матрицю!', 'success');
+    } else {
+      showStatus('❌ Помилка відправки', 'error');
+    }
+  } catch (e) {
+    showStatus('❌ Помилка з\'єднання', 'error');
+  }
+}
+
+function showStatus(msg, type) {
+  const s = document.getElementById('status');
+  s.textContent = msg;
+  s.className = 'status show ' + type;
+  setTimeout(() => s.classList.remove('show'), 2000);
+}
+
+init();
+</script>
+</body>
+</html>
+)rawliteral";
+
 #endif

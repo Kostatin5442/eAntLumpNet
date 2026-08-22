@@ -12,8 +12,6 @@
 #include "index_html.h"
 #include "webhandlers.h"
 
-#define PIN_BTN_1 20
-#define State_Green 21
 // === WIFI ===
 const char* ssid = " ";
 const char* password = " ";
@@ -170,10 +168,6 @@ void flashingStepUpdate() {
   strip.show();
   flashingFrame++;
 }
-//Роути для налаштауваня модуля на з'єднання
-
-
-
 // HTTP HANDLERS
 void handleRainbow() {
   currentEffect = RAINBOW;
@@ -200,10 +194,6 @@ void handleColorWaves() {
   currentEffect = COLOR_WAVES;
   server.send(200, "text/plain", "Color Waves started");
 }
-
-
-
-
 // SETUP - 
 void setup() {
   Serial.begin(115200);
@@ -216,10 +206,8 @@ bool hasSavedWifi = loadSavedWifi(savedSsid, savedPassword);
 WiFi.mode(WIFI_STA);
 
 if (hasSavedWifi && savedSsid.length() > 0) {
-  Serial.println("📡 Підключення до збереженої мережі: " + savedSsid);
   WiFi.begin(savedSsid.c_str(), savedPassword.c_str());
 } else {
-  Serial.println("⚠️ Збережених WiFi даних немає. Використовую hardcoded...");
   WiFi.begin(ssid, password);
 }
 
@@ -231,13 +219,10 @@ while (WiFi.status() != WL_CONNECTED && attempts < 20) {
 }
 
 if (WiFi.status() != WL_CONNECTED) {
-  Serial.println("\n❌ Не вдалося підключитись. Запускаю Setup Portal...");
   isAPMode = true;
   WiFi.disconnect();
   delay(100);
   WiFi.softAP("ESP32_Setup", "");  // Без пароля для зручності першого підключення
-  Serial.println("✅ AP створено: ESP32_Setup");
-  Serial.println("📱 Підключись до WiFi 'ESP32_Setup' та відкрий 192.168.4.1/setup");
 } else {
   Serial.println("\n✅ WiFi підключено!");
   Serial.println(WiFi.localIP());
@@ -257,7 +242,6 @@ if (!MDNS.begin(mdns_hostname)) {
   Serial.print("   або: http://");
   Serial.println(isAPMode ? WiFi.softAPIP() : WiFi.localIP());
 }
-
   // === Initialize LED strip ===
   strip.begin();
   strip.setBrightness(100);
@@ -341,6 +325,10 @@ if (!MDNS.begin(mdns_hostname)) {
   server.on("/setup", HTTP_GET, handleSetupPage);
   server.on("/api/scan", HTTP_GET, handleScanNetworks);
   server.on("/api/save", HTTP_POST, handleSaveWifi);
+  server.on("/pixel_art", HTTP_GET, handlePixelArtPage);
+  server.on("/api/pixel_art", HTTP_POST, handlePixelArtData);
+
+
   server.begin();
 }
 // LOOP

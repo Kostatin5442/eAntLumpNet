@@ -1,11 +1,14 @@
 #ifndef WEBHANDLERS_H
 #define WEBHANDLERS_H
-
+#include <Adafruit_NeoPixel.h>
 #include <WebServer.h>
 #include <WiFi.h>
 #include <Preferences.h>
 
 //
+// Оголошення зовнішніх змінних
+extern Adafruit_NeoPixel strip;
+
 extern WebServer server;
 extern Preferences wifiPrefs;
 extern bool isAPMode;
@@ -19,5 +22,7 @@ void handleSaveWifi();
 void handleWifiPage();
 void handleControlPage();
 void handleScanNetworks();
+void handlePixelArtPage();
+void handlePixelArtData();
 
 #endif
