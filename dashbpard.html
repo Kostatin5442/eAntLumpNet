@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ESP32 • Command Center</title>
+<style>
+  :root { --bg: #23335d; --card: rgba(20, 25, 40, 0.7); --accent: #00f2ff; --accent-glow: rgba(0, 242, 255, 0.3); --text: #e2e8f0; --muted: #64748b; --danger: #ef4444; }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 16px; min-height: 100vh; display: flex; flex-direction: column; gap: 16px; }
+  
+  /* Анімований фон */
+  body::before { content: ''; position: fixed; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(circle, var(--accent-glow) 0%, transparent 60%); opacity: 0.15; animation: pulse-bg 8s ease-in-out infinite; z-index: -1; pointer-events: none; }
+  @keyframes pulse-bg { 0%, 100% { transform: scale(1); opacity: 0.15; } 50% { transform: scale(1.1); opacity: 0.25; } }
+
+  .header { display: flex; justify-content: space-between; align-items: center; padding: 8px 4px; }
+  .header h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; background: linear-gradient(90deg, #fff, var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .status-badge { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid rgba(255,255,255,0.1); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 8px var(--danger); transition: 0.3s; }
+  .dot.online { background: #10b981; box-shadow: 0 0 8px #10b981; }
+
+  .card { background: var(--card); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; padding: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+  .card-title { font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 16px; font-weight: 700; display: flex; justify-content: space-between; }
+
+  /* Візуалізатор (імітація матриці) */
+  .visualizer { height: 120px; border-radius: 12px; background: linear-gradient(135deg, rgba(0,242,255,0.1), rgba(0,0,0,0)); border: 1px solid rgba(0,242,255,0.2); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; margin-bottom: 20px; }
+  .visualizer::after { content: 'MATRIX ACTIVE'; font-size: 14px; font-weight: 800; color: var(--accent); letter-spacing: 2px; opacity: 0.8; animation: text-flicker 3s infinite; }
+  @keyframes text-flicker { 0%, 100% { opacity: 0.8; } 50% { opacity: 0.4; } }
+
+  /* Повзунок яскравості */
+  .slider-wrap { display: flex; align-items: center; gap: 16px; }
+  .slider-wrap input { flex: 1; -webkit-appearance: none; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; outline: none; }
+  .slider-wrap input::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; background: var(--accent); border-radius: 50%; cursor: pointer; box-shadow: 0 0 15px var(--accent-glow); border: 2px solid #fff; }
+  .val-display { font-family: 'Courier New', monospace; font-size: 20px; font-weight: bold; color: var(--accent); min-width: 45px; text-align: right; }
+
+  /* Сітка ефектів */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 10px; }
+  .btn { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: var(--text); padding: 14px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); text-align: center; line-height: 1.3; }
+  .btn:active { transform: scale(0.95); }
+  .btn.active { background: var(--accent); color: #000; border-color: var(--accent); box-shadow: 0 0 20px var(--accent-glow); font-weight: 800; }
+  .btn-off { background: rgba(239, 68, 68, 0.15); color: var(--danger); border-color: rgba(239, 68, 68, 0.3); }
+  .btn-off.active { background: var(--danger); color: #fff; box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); }
+
+  /* Системна інформація */
+  .sys-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .sys-item { background: rgba(0,0,0,0.2); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
+  .sys-label { font-size: 10px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+  .sys-value { font-family: monospace; font-size: 14px; color: #fff; word-break: break-all; }
+
+  /* Toast сповіщення */
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--accent); color: #000; padding: 12px 24px; border-radius: 50px; font-weight: 700; font-size: 13px; opacity: 0; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: 0 10px 40px rgba(0,242,255,0.3); z-index: 999; white-space: nowrap; }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>LED COMMAND</h1>
+    <div class="status-badge">
+      <div class="dot" id="connDot"></div>
+      <span id="connText">Offline</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="visualizer" id="visualizer"></div>
+    
+    <div class="card-title">
+      <span>Яскравість</span>
+      <span id="brightLabel">MASTER</span>
+    </div>
+    <div class="slider-wrap">
+      <input type="range" id="brightness" min="0" max="250" value="100" oninput="updateBrightLabel(this.value)" onchange="setBrightness(this.value)">
+      <div class="val-display" id="brightVal">100</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Бібліотека ефектів</div>
+    <div class="grid">
+      <button class="btn" onclick="setEffect('/effects_fire/state1', this)">Rainbow</button>
+      <button class="btn" onclick="setEffect('/effects_fire/state2', this)">Fire</button>
+      <button class="btn" onclick="setEffect('/effects_fire/state3', this)">Flashing</button>
+      <button class="btn" onclick="setEffect('/effects_fire/state4', this)">Starfield</button>
+      <button class="btn" onclick="setEffect('/effects_fire/state5', this)">Color Waves</button>
+      <button class="btn" onclick="setEffect('/effects_fire/state6', this)">Meteor</button>
+      <button class="btn" onclick="setEffect('/effects_fire/state7', this)">Ripple</button>
+      <button class="btn" onclick="setEffect('/effects_fire/state8', this)">Matrix</button>
+      <button class="btn" onclick="setEffect('/effects_fire/state9', this)">Aurora</button>
+      <button class="btn" onclick="setEffect('/effects_fire/state10', this)">Galaxy</button>
+      <button class="btn" onclick="setEffect('/effects_fire/state11', this)">Tunnel</button>
+      <button class="btn" onclick="setEffect('/effects_fire/state12', this)">Spiral</button>
+      <button class="btn" onclick="setEffect('/effects_fire/state13', this)">Nebula</button>
+      <button class="btn" onclick="setEffect('/effects_fire/state14', this)">Sparkles</button>
+      <button class="btn" onclick="setEffect('/ws2812/glitch_bars', this)">Glitch Bars</button>
+      <button class="btn" onclick="setEffect('/ws2812/pixel_noise', this)">Pixel Noise</button>
+      <button class="btn" onclick="setEffect('/ws2812/glitch_columns', this)">Glitch Cols</button>
+      <button class="btn" onclick="setEffect('/ws2812/psychedelic_flow', this)">Psychedelic</button>
+      <button class="btn btn-off" onclick="setEffect('/effects_fire/off', this)" style="grid-column: span 2;">⏹ ВИМКНУТИ ВСЕ</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Системний моніторинг</div>
+    <div class="sys-grid">
+      <div class="sys-item">
+        <div class="sys-label">Мережа (SSID)</div>
+        <div class="sys-value" id="sysSsid">—</div>
+      </div>
+      <div class="sys-item">
+        <div class="sys-label">IP Адреса</div>
+        <div class="sys-value" id="sysIp">—</div>
+      </div>
+      <div class="sys-item">
+        <div class="sys-label">Сила сигналу</div>
+        <div class="sys-value" id="sysRssi">—</div>
+      </div>
+      <div class="sys-item">
+        <div class="sys-label">Режим</div>
+        <div class="sys-value" id="sysMode">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">Команду виконано</div>
+
+<script>
+  // Оновлення підпису яскравості без запиту до сервера (для плавності)
+  function updateBrightLabel(val) {
+    document.getElementById('brightVal').textContent = val;
+  }
+
+  // Відправка команди яскравості
+  function setBrightness(val) {
+    fetch('/brightness?value=' + val).then(() => showToast('Яскравість: ' + val));
+  }
+
+  // Відправка команди ефекту
+  function setEffect(url, btn) {
+    document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+    if(btn) btn.classList.add('active');
+    
+    // Ефект мерехтіння візуалізатора при зміні
+    const viz = document.getElementById('visualizer');
+    viz.style.borderColor = 'rgba(255,255,255,0.5)';
+    setTimeout(() => viz.style.borderColor = 'rgba(0,242,255,0.2)', 300);
+
+    fetch(url).then(() => showToast('Ефект активований'));
+  }
+
+  // Показ сповіщення
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1500);
+  }
+
+  // Фонове оновлення системної інформації (кожні 3 сек)
+  async function updateSystemInfo() {
+    try {
+      const res = await fetch('/api/wifi'); // Використовуємо твій існуючий API роут
+      const data = await res.json();
+      
+      const dot = document.getElementById('connDot');
+      const connText = document.getElementById('connText');
+      
+      if (data.state === 'Підключено' || data.state === 'CONNECTED') {
+        dot.classList.add('online');
+        connText.textContent = 'Online';
+      } else {
+        dot.classList.remove('online');
+        connText.textContent = 'AP Mode';
+      }
+
+      document.getElementById('sysSsid').textContent = data.ssid || 'Немає';
+      document.getElementById('sysIp').textContent = data.ip;
+      document.getElementById('sysRssi').textContent = data.rssi + ' dBm';
+      document.getElementById('sysMode').textContent = data.mode;
+    } catch (e) {
+      // Якщо /api/wifi ще не налаштовано, ігноруємо помилку, щоб не ламати сторінку
+      console.log('Очікування даних системи...');
+    }
+  }
+
+  // Запуск оновлення при завантаженні і кожні 3 секунди
+  updateSystemInfo();
+  setInterval(updateSystemInfo, 3000);
+</script>
+</body>
+</html>
+)rawliteral";
+// ==========================================
+// 🎛️ Красива веб-панель керування (PROGMEM)
+// ==========================================
+const char CONTROL_PAGE_HTML[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ESP32 • Панель керування</title>
+<style>
+  :root { --bg: #0f172a; --card: rgba(30, 41, 59, 0.8); --accent: #10b981; --text: #f1f5f9; --muted: #94a3b8; }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 16px; min-height: 100vh; }
+  
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .header h1 { font-size: 20px; font-weight: 700; }
+  .wifi-link { background: rgba(255,255,255,0.1); padding: 8px 12px; border-radius: 8px; text-decoration: none; color: var(--text); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+
+  .card { background: var(--card); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 20px; margin-bottom: 20px; }
+  .card-title { font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; font-weight: 600; }
+
+  /* Яскравість */
+  .slider-container { display: flex; align-items: center; gap: 16px; }
+  .slider-container input { flex: 1; -webkit-appearance: none; height: 8px; background: #334155; border-radius: 4px; outline: none; }
+  .slider-container input::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; background: var(--accent); border-radius: 50%; cursor: pointer; box-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
+  .brightness-val { font-family: monospace; font-size: 18px; font-weight: bold; min-width: 40px; text-align: right; }
+
+  /* Сітка ефектів */
+  .effects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; }
+  .btn-effect {
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text);
+    padding: 12px 8px; border-radius: 10px; font-size: 13px; font-weight: 500; cursor: pointer;
+    transition: all 0.2s ease; text-align: center;
+  }
+  .btn-effect:active { transform: scale(0.95); background: rgba(16, 185, 129, 0.2); border-color: var(--accent); }
+  .btn-effect.active { background: var(--accent); color: #000; font-weight: 700; border-color: var(--accent); box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+
+  /* Керування */
+  .control-row { display: flex; gap: 10px; margin-top: 10px; }
+  .btn-control { flex: 1; background: #334155; border: none; color: white; padding: 14px; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+  .btn-control:active { background: #475569; }
+  .btn-off { background: #ef4444; color: white; }
+  .btn-off:active { background: #dc2626; }
+
+  /* Toast сповіщення */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px);
+    background: rgba(16, 185, 129, 0.9); color: #000; padding: 12px 24px; border-radius: 50px;
+    font-weight: 600; font-size: 14px; opacity: 0; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5); pointer-events: none; z-index: 100;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>💡 LED Controller</h1>
+    <a href="/wifi" class="wifi-link">📶 Wi-Fi</a>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Яскравість</div>
+    <div class="slider-container">
+      <input type="range" id="brightness" min="0" max="250" value="100" onchange="setBrightness(this.value)">
+      <span class="brightness-val" id="brightVal">100</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Ефекти</div>
+    <div class="effects-grid">
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state1', this)">Rainbow</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state2', this)">Fire</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state3', this)">Flashing</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state4', this)">Starfield</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state5', this)">Color Waves</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state6', this)">Meteor</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state7', this)">Ripple</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state8', this)">Matrix</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state9', this)">Aurora</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state10', this)">Galaxy</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state11', this)">Tunnel</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state12', this)">Spiral</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state13', this)">Nebula</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state14', this)">Sparkles</button>
+      <button class="btn-effect" onclick="setEffect('/ws2812/glitch_bars', this)">Glitch Bars</button>
+      <button class="btn-effect" onclick="setEffect('/ws2812/pixel_noise', this)">Pixel Noise</button>
+      <button class="btn-effect" onclick="setEffect('/ws2812/glitch_columns', this)">Glitch Cols</button>
+      <button class="btn-effect" onclick="setEffect('/ws2812/psychedelic_flow', this)">Psychedelic</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Швидке керування</div>
+    <div class="control-row">
+      <button class="btn-control" onclick="sendCmd('/ws2812/prev')">⏮ Назад</button>
+      <button class="btn-control btn-off" onclick="sendCmd('/effects_fire/off')">⏹ ВИМК</button>
+      <button class="btn-control" onclick="sendCmd('/ws2812/next')">Далі ⏭</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">Команду виконано!</div>
+
+<script>
+  function sendCmd(url) {
+    fetch(url).then(() => showToast("Команду відправлено"));
+  }
+
+  function setEffect(url, btn) {
+    // Прибираємо активний клас у всіх кнопок
+    document.querySelectorAll('.btn-effect').forEach(b => b.classList.remove('active'));
+    // Додаємо активний клас натиснутій кнопці
+    btn.classList.add('active');
+    fetch(url).then(() => showToast("Ефект змінено!"));
+  }
+
+  function setBrightness(val) {
+    document.getElementById('brightVal').textContent = val;
+    fetch('/brightness?value=' + val).then(() => showToast("Яскравість: " + val));
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1500);
+  }
+</script>
+</body>
+</html>

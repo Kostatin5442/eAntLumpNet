@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ESP32 • Панель керування</title>
+<style>
+  :root { --bg: #0f172a; --card: rgba(30, 41, 59, 0.8); --accent: #10b981; --text: #f1f5f9; --muted: #94a3b8; }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 16px; min-height: 100vh; }
+  
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .header h1 { font-size: 20px; font-weight: 700; }
+  .wifi-link { background: rgba(255,255,255,0.1); padding: 8px 12px; border-radius: 8px; text-decoration: none; color: var(--text); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+
+  .card { background: var(--card); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 20px; margin-bottom: 20px; }
+  .card-title { font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; font-weight: 600; }
+
+  /* Яскравість */
+  .slider-container { display: flex; align-items: center; gap: 16px; }
+  .slider-container input { flex: 1; -webkit-appearance: none; height: 8px; background: #334155; border-radius: 4px; outline: none; }
+  .slider-container input::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; background: var(--accent); border-radius: 50%; cursor: pointer; box-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
+  .brightness-val { font-family: monospace; font-size: 18px; font-weight: bold; min-width: 40px; text-align: right; }
+
+  /* Сітка ефектів */
+  .effects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; }
+  .btn-effect {
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text);
+    padding: 12px 8px; border-radius: 10px; font-size: 13px; font-weight: 500; cursor: pointer;
+    transition: all 0.2s ease; text-align: center;
+  }
+  .btn-effect:active { transform: scale(0.95); background: rgba(16, 185, 129, 0.2); border-color: var(--accent); }
+  .btn-effect.active { background: var(--accent); color: #000; font-weight: 700; border-color: var(--accent); box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+
+  /* Керування */
+  .control-row { display: flex; gap: 10px; margin-top: 10px; }
+  .btn-control { flex: 1; background: #334155; border: none; color: white; padding: 14px; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+  .btn-control:active { background: #475569; }
+  .btn-off { background: #ef4444; color: white; }
+  .btn-off:active { background: #dc2626; }
+
+  /* Toast сповіщення */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px);
+    background: rgba(16, 185, 129, 0.9); color: #000; padding: 12px 24px; border-radius: 50px;
+    font-weight: 600; font-size: 14px; opacity: 0; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5); pointer-events: none; z-index: 100;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>💡 LED Controller</h1>
+    <a href="/wifi" class="wifi-link">📶 Wi-Fi</a>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Яскравість</div>
+    <div class="slider-container">
+      <input type="range" id="brightness" min="0" max="250" value="100" onchange="setBrightness(this.value)">
+      <span class="brightness-val" id="brightVal">100</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Ефекти</div>
+    <div class="effects-grid">
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state1', this)">Rainbow</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state2', this)">Fire</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state3', this)">Flashing</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state4', this)">Starfield</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state5', this)">Color Waves</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state6', this)">Meteor</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state7', this)">Ripple</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state8', this)">Matrix</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state9', this)">Aurora</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state10', this)">Galaxy</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state11', this)">Tunnel</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state12', this)">Spiral</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state13', this)">Nebula</button>
+      <button class="btn-effect" onclick="setEffect('/effects_fire/state14', this)">Sparkles</button>
+      <button class="btn-effect" onclick="setEffect('/ws2812/glitch_bars', this)">Glitch Bars</button>
+      <button class="btn-effect" onclick="setEffect('/ws2812/pixel_noise', this)">Pixel Noise</button>
+      <button class="btn-effect" onclick="setEffect('/ws2812/glitch_columns', this)">Glitch Cols</button>
+      <button class="btn-effect" onclick="setEffect('/ws2812/psychedelic_flow', this)">Psychedelic</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Швидке керування</div>
+    <div class="control-row">
+      <button class="btn-control" onclick="sendCmd('/ws2812/prev')">⏮ Назад</button>
+      <button class="btn-control btn-off" onclick="sendCmd('/effects_fire/off')">⏹ ВИМК</button>
+      <button class="btn-control" onclick="sendCmd('/ws2812/next')">Далі ⏭</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">Команду виконано!</div>
+
+<script>
+  function sendCmd(url) {
+    fetch(url).then(() => showToast("Команду відправлено"));
+  }
+
+  function setEffect(url, btn) {
+    // Прибираємо активний клас у всіх кнопок
+    document.querySelectorAll('.btn-effect').forEach(b => b.classList.remove('active'));
+    // Додаємо активний клас натиснутій кнопці
+    btn.classList.add('active');
+    fetch(url).then(() => showToast("Ефект змінено!"));
+  }
+
+  function setBrightness(val) {
+    document.getElementById('brightVal').textContent = val;
+    fetch('/brightness?value=' + val).then(() => showToast("Яскравість: " + val));
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1500);
+  }
+</script>
+</body>
+</html>
+)rawliteral";
+// ==========================================
+// 🌐 Красива HTML-сторінка статусу Wi-Fi
+// ==========================================
+const char WIFI_PAGE_HTML[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESP32 • Wi-Fi Статус</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0f172a, #1e293b);
+    min-height: 100vh;
+    color: #e2e8f0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+  }
+  .card {
+    background: rgba(30, 41, 59, 0.7);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    padding: 28px;
+    width: 100%;
+    max-width: 420px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  }
+  .header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .header h1 { font-size: 22px; font-weight: 600; color: #fff; }
+  .pulse {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #10b981; box-shadow: 0 0 0 rgba(16, 185, 129, 0.4);
+    animation: pulse 2s infinite;
+  }
+  .pulse.off { background: #ef4444; box-shadow: 0 0 0 rgba(239, 68, 68, 0.4); }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+  }
+  .subtitle { font-size: 13px; color: #94a3b8; margin-bottom: 24px; }
+  
+  .row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .row:last-child { border-bottom: none; }
+  .label { color: #94a3b8; font-size: 14px; }
+  .value { font-family: "SF Mono", Menlo, monospace; font-size: 14px; font-weight: 500; color: #f8fafc; }
+  
+  .signal-container { display: flex; align-items: center; gap: 10px; }
+  .signal-bars { display: flex; gap: 3px; align-items: flex-end; height: 16px; }
+  .signal-bars span {
+    width: 4px; background: #334155; border-radius: 2px; transition: background 0.3s;
+  }
+  .signal-bars span:nth-child(1) { height: 25%; }
+  .signal-bars span:nth-child(2) { height: 50%; }
+  .signal-bars span:nth-child(3) { height: 75%; }
+  .signal-bars span:nth-child(4) { height: 100%; }
+  .signal-bars.active span { background: #10b981; box-shadow: 0 0 6px #10b981; }
+  
+  .rssi-bar-bg {
+    height: 6px; background: #334155; border-radius: 3px; overflow: hidden; margin-top: 8px;
+  }
+  .rssi-bar-fill {
+    height: 100%; border-radius: 3px; transition: width 0.5s ease, background 0.5s ease;
+    background: linear-gradient(90deg, #ef4444, #f59e0b, #10b981);
+  }
+  .footer { margin-top: 24px; text-align: center; font-size: 12px; color: #64748b; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="pulse" id="statusDot"></div>
+      <h1>Wi-Fi Статус</h1>
+    </div>
+    <div class="subtitle" id="modeText">Завантаження...</div>
+
+    <div class="row">
+      <span class="label">Мережа (SSID)</span>
+      <span class="value" id="ssid">—</span>
+    </div>
+    <div class="row">
+      <span class="label">IP-адреса</span>
+      <span class="value" id="ip">—</span>
+    </div>
+    <div class="row">
+      <span class="label">MAC-адреса</span>
+      <span class="value" id="mac">—</span>
+    </div>
+    <div class="row">
+      <span class="label">Сила сигналу</span>
+      <div class="signal-container">
+        <span class="value" id="rssiText">—</span>
+        <div class="signal-bars" id="signalBars">
+          <span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+    </div>
+    <div class="rssi-bar-bg">
+      <div class="rssi-bar-fill" id="rssiBar" style="width: 0%"></div>
+    </div>
+
+    <div class="footer">Оновлюється автоматично кожні 2 сек</div>
+  </div>
+
+<script>
+  async function updateStatus() {
+    try {
+      const res = await fetch('/api/wifi');
+      const data = await res.json();
+      
+      // Статус і пульсація
+      const dot = document.getElementById('statusDot');
+      const modeText = document.getElementById('modeText');
+      if (data.state === 'Підключено') {
+        dot.classList.remove('off');
+        modeText.textContent = 'Режим: ' + data.mode;
+      } else {
+        dot.classList.add('off');
+        modeText.textContent = 'Режим: ' + data.mode + ' (Немає з\'єднання)';
+      }
+
+      // Дані
+      document.getElementById('ssid').textContent = data.ssid || 'Немає';
+      document.getElementById('ip').textContent = data.ip;
+      document.getElementById('mac').textContent = data.mac;
+      document.getElementById('rssiText').textContent = data.rssi + ' dBm';
+
+      // Візуалізація сигналу
+      const rssi = parseInt(data.rssi);
+      let bars = 0;
+      if (rssi > -55) bars = 4;
+      else if (rssi > -65) bars = 3;
+      else if (rssi > -75) bars = 2;
+      else if (rssi > -85) bars = 1;
+      
+      const barsEl = document.getElementById('signalBars');
+      barsEl.className = 'signal-bars' + (bars > 0 ? ' active' : '');
+      Array.from(barsEl.children).forEach((bar, i) => {
+        bar.style.background = i < bars ? '#10b981' : '#334155';
+        bar.style.boxShadow = i < bars ? '0 0 6px #10b981' : 'none';
+      });
+
+      // Шкала прогресу (від -90 до -30 dBm)
+      let percent = Math.min(100, Math.max(0, (rssi + 90) * (100 / 60)));
+      document.getElementById('rssiBar').style.width = percent + '%';
+
+    } catch (e) {
+      console.error('Помилка отримання даних', e);
+    }
+  }
+  updateStatus();
+  setInterval(updateStatus, 2000);
+</script>
+</body>
+</html>
