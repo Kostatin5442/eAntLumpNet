@@ -12,9 +12,7 @@
 #include "index_html.h"
 #include "webhandlers.h"
 
-// =============WIFI налаштування===========================
-const char* ssid = " ";
-const char* password = " ";
+
 // ==========✅ mDNS налаштування===========================
 const char* mdns_hostname = "ledpanel";   // буде доступний як ledpanel.local
 const char* mdns_instance = "ESP32 LED Panel";

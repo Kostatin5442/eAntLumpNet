@@ -1,0 +1,24 @@
+                    ESP32
+                      │
+          ┌───────────┴───────────┐
+          │                       │
+       Wi-Fi STA                Wi-Fi AP
+          │                       │
+          │                   ESP32_Setup
+          │                       │
+          ▼                       ▼
+    ledpanel.local             192.168.4.1
+          │                       │
+          └───────────┬───────────┘
+                      │
+                      ▼
+                WebServer :80
+                      │
+        ┌─────────────┼─────────────┐
+        │             │             │
+     Dashboard      Setup         API
+        │             │             │
+     Effects      Wi-Fi save     Control
+        │
+        ▼
+   WS2812B matrix

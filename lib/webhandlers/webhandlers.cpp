@@ -129,7 +129,6 @@ void handlePixelArtData() {
   String json = server.arg("plain");
   Serial.println("🎨 Отримано Pixel Art дані: " + json);
 
-
   // Тут можна розпарсити JSON і встановити кольори на матриці
   // Для простоти - просто підтверджуємо отримання
   server.send(200, "text/plain", "OK");

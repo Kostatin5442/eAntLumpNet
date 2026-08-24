@@ -5,9 +5,7 @@
 #include <WebServer.h>
 #include <WiFi.h>
 #include <ESPmDNS.h>
-// === WIFI НАЛАШТУВАННЯ ===
-extern const char* ssid;
-extern const char* password;
+
 // mDNS налаштування
 extern const char* mdns_hostname;
 extern const char* mdns_instance;
