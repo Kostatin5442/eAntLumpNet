@@ -1,9 +1,9 @@
 #ifndef INDEX_HTML_H
 #define INDEX_HTML_H
 #include <pgmspace.h>
-// ==========================================
-// 📡 СТИЛЬНА сторінка налаштування WiFi (PROGMEM)
-// ==========================================
+//= ================================================
+//=📡 =СТИЛЬНА сторінка налаштування WiFi (PROGMEM)=
+//= ================================================
 const char SETUP_PAGE_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="uk">DASHBOARD_HTML

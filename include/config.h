@@ -43,7 +43,7 @@ struct Meteor {
 extern Star stars[STAR_COUNT];
 extern Meteor meteor;
 
-// === СПИСОК ЕФЕКТІВ ===
+// === СПИСОК ЕФЕКТІВ та режимів===
 enum Effect {
   NONE,
   RAINBOW,
@@ -65,6 +65,7 @@ enum Effect {
   GLITCH_COLUMNS,
   PSYCHEDELIC_FLOW,
   CHAT,
+  PIXEL_ART,
   OFF
 };
 

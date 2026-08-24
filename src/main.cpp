@@ -12,10 +12,10 @@
 #include "index_html.h"
 #include "webhandlers.h"
 
-// === WIFI ===
+// =============WIFI налаштування===========================
 const char* ssid = " ";
 const char* password = " ";
-// ✅ mDNS налаштування
+// ==========✅ mDNS налаштування===========================
 const char* mdns_hostname = "ledpanel";   // буде доступний як ledpanel.local
 const char* mdns_instance = "ESP32 LED Panel";
 
@@ -23,8 +23,8 @@ const char* mdns_instance = "ESP32 LED Panel";
 Preferences wifiPrefs;
 WebServer server(80);
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
-
 bool isAPMode = false;
+
 // Прототипи функцій (Function prototypes)
 int xyToIndex(int x, int y);
 void drawCharOnStrip(int16_t x, char c, uint32_t color);
@@ -197,51 +197,98 @@ void handleColorWaves() {
 // SETUP - 
 void setup() {
   Serial.begin(115200);
-  Serial.println("Стартуємо...");
-// =========== Wi-Fi attempt =============
-String savedSsid = "";
-String savedPassword = "";
-bool hasSavedWifi = loadSavedWifi(savedSsid, savedPassword);
 
-WiFi.mode(WIFI_STA);
+  // =====================================================
+  // Wi-Fi
+  // =====================================================
 
-if (hasSavedWifi && savedSsid.length() > 0) {
-  WiFi.begin(savedSsid.c_str(), savedPassword.c_str());
-} else {
-  WiFi.begin(ssid, password);
-}
+  String savedSsid = "";
+  String savedPassword = "";
 
-int attempts = 0;
-while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-  delay(400);
-  Serial.print(".");
-  attempts++;
-}
+  bool hasSavedWifi = loadSavedWifi(savedSsid, savedPassword);
 
-if (WiFi.status() != WL_CONNECTED) {
-  isAPMode = true;
-  WiFi.disconnect();
-  delay(100);
-  WiFi.softAP("ESP32_Setup", "");  // Без пароля для зручності першого підключення
-} else {
-  Serial.println("\n✅ WiFi підключено!");
-  Serial.println(WiFi.localIP());
-}
+  WiFi.mode(WIFI_STA);
 
-// === 🔹 mDNS ===
-if (!MDNS.begin(mdns_hostname)) {
-  Serial.println("❌ Помилка запуску mDNS!");
-} else {
-  Serial.println("✅ mDNS запущено");
-  MDNS.addService("http", "tcp", 80);
-  MDNS.setInstanceName(mdns_instance);
+  // =====================================================
+  // Є збережені Wi-Fi дані
+  // =====================================================
 
-  Serial.print("🌐 Доступ за адресою: http://");
-  Serial.print(mdns_hostname);
-  Serial.println(".local");
-  Serial.print("   або: http://");
-  Serial.println(isAPMode ? WiFi.softAPIP() : WiFi.localIP());
-}
+  if (hasSavedWifi && savedSsid.length() > 0) {
+
+    Serial.print("Підключення до: ");
+    Serial.println(savedSsid);
+
+    WiFi.begin(savedSsid.c_str(), savedPassword.c_str());
+
+    int attempts = 0;
+
+    while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+      delay(500);
+      Serial.print(".");
+      attempts++;
+    }
+
+    Serial.println();
+
+    // Wi-Fi підключено
+    if (WiFi.status() == WL_CONNECTED) {
+
+      isAPMode = false;
+
+      Serial.print("WiFi: ");
+      Serial.println(WiFi.localIP());
+
+      // mDNS
+      if (MDNS.begin(mdns_hostname)) {
+
+        MDNS.addService("http", "tcp", 80);
+        MDNS.setInstanceName(mdns_instance);
+
+        Serial.print("mDNS: http://");
+        Serial.print(mdns_hostname);
+        Serial.println(".local");
+      }
+    }
+
+    // Wi-Fi не підключено
+    else {
+
+      Serial.println("WiFi не підключено. AP режим.");
+
+      WiFi.disconnect(true);
+      delay(100);
+
+      isAPMode = true;
+
+      WiFi.mode(WIFI_AP);
+      WiFi.softAP("ESP32_Setup");
+
+      Serial.print("AP: ");
+      Serial.println(WiFi.softAPIP());
+    }
+  }
+
+  // =====================================================
+  // Збережених даних немає
+  // =====================================================
+
+  else {
+
+    Serial.println("WiFi даних немає. AP режим.");
+
+    isAPMode = true;
+
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP("ESP32_Setup");
+
+    Serial.print("AP: ");
+    Serial.println(WiFi.softAPIP());
+  }
+
+  // =====================================================
+  // HTTP сервер
+  // =====================================================
+
   // === Initialize LED strip ===
   strip.begin();
   strip.setBrightness(100);
