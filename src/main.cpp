@@ -9,20 +9,12 @@
 #include <math.h>
 #include <Preferences.h>
 #include <config.h>
-#include "index_html.h"
-#include "webhandlers.h"
-
-
-// ==========✅ mDNS налаштування===========================
-const char* mdns_hostname = "ledpanel";   // буде доступний як ledpanel.local
-const char* mdns_instance = "ESP32 LED Panel";
-
+#include "wifi_manager.h" //Функції для кеування wifi
+#include "index_html.h"//Сторінки для WEB
+#include "webhandlers.h"//функції керування через WEB
 //Глобальні змінні оголошення для класів
-Preferences wifiPrefs;
 WebServer server(80);
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
-bool isAPMode = false;
-
 // Прототипи функцій (Function prototypes)
 int xyToIndex(int x, int y);
 void drawCharOnStrip(int16_t x, char c, uint32_t color);
@@ -195,98 +187,7 @@ void handleColorWaves() {
 // SETUP - 
 void setup() {
   Serial.begin(115200);
-
-  // =====================================================
-  // Wi-Fi
-  // =====================================================
-
-  String savedSsid = "";
-  String savedPassword = "";
-
-  bool hasSavedWifi = loadSavedWifi(savedSsid, savedPassword);
-
-  WiFi.mode(WIFI_STA);
-
-  // =====================================================
-  // Є збережені Wi-Fi дані
-  // =====================================================
-
-  if (hasSavedWifi && savedSsid.length() > 0) {
-
-    Serial.print("Підключення до: ");
-    Serial.println(savedSsid);
-
-    WiFi.begin(savedSsid.c_str(), savedPassword.c_str());
-
-    int attempts = 0;
-
-    while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-      delay(500);
-      Serial.print(".");
-      attempts++;
-    }
-
-    Serial.println();
-
-    // Wi-Fi підключено
-    if (WiFi.status() == WL_CONNECTED) {
-
-      isAPMode = false;
-
-      Serial.print("WiFi: ");
-      Serial.println(WiFi.localIP());
-
-      // mDNS
-      if (MDNS.begin(mdns_hostname)) {
-
-        MDNS.addService("http", "tcp", 80);
-        MDNS.setInstanceName(mdns_instance);
-
-        Serial.print("mDNS: http://");
-        Serial.print(mdns_hostname);
-        Serial.println(".local");
-      }
-    }
-
-    // Wi-Fi не підключено
-    else {
-
-      Serial.println("WiFi не підключено. AP режим.");
-
-      WiFi.disconnect(true);
-      delay(100);
-
-      isAPMode = true;
-
-      WiFi.mode(WIFI_AP);
-      WiFi.softAP("ESP32_Setup");
-
-      Serial.print("AP: ");
-      Serial.println(WiFi.softAPIP());
-    }
-  }
-
-  // =====================================================
-  // Збережених даних немає
-  // =====================================================
-
-  else {
-
-    Serial.println("WiFi даних немає. AP режим.");
-
-    isAPMode = true;
-
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP("ESP32_Setup");
-
-    Serial.print("AP: ");
-    Serial.println(WiFi.softAPIP());
-  }
-
-  // =====================================================
-  // HTTP сервер
-  // =====================================================
-
+  initWiFi();//Ініціалізація Wifi. Відкриття Центру налаштування
   // === Initialize LED strip ===
   strip.begin();
   strip.setBrightness(100);
@@ -355,10 +256,8 @@ void setup() {
     currentEffect = (Effect)prev;
     server.send(200, "text/plain", "Prev effect");
   });
-  
   server.on("/ws2812/draw", HTTP_GET, handleDraw);
   server.on("/chat", HTTP_GET, handleChat);
-  
   // ✅ НОВИЙ: Обробник для перевірки статусу WiFi
   // Красива сторінка статусу Wi-Fi
   server.on("/wifi", HTTP_GET, handleWifiPage);
@@ -370,10 +269,7 @@ void setup() {
   server.on("/setup", HTTP_GET, handleSetupPage);
   server.on("/api/scan", HTTP_GET, handleScanNetworks);
   server.on("/api/save", HTTP_POST, handleSaveWifi);
-  server.on("/pixel_art", HTTP_GET, handlePixelArtPage);
-  server.on("/api/pixel_art", HTTP_POST, handlePixelArtData);
-
-
+  server.on("/api/wifi/reset", HTTP_POST, handleResetWifi);
   server.begin();
 }
 // LOOP

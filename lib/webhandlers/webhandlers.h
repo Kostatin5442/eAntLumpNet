@@ -14,7 +14,7 @@ extern Preferences wifiPrefs;
 extern bool isAPMode;
 
 //Роути для налаштауваня модуля на з'єднання
-bool loadSavedWifi(String &ssid, String &password);
+//bool loadSavedWifi(String &ssid, String &password);
 void handleSetupPage();
 void handleWifiStatusApi();
 void handleDashboard();
@@ -22,7 +22,6 @@ void handleSaveWifi();
 void handleWifiPage();
 void handleControlPage();
 void handleScanNetworks();
-void handlePixelArtPage();
-void handlePixelArtData();
+void handleResetWifi();
 
 #endif

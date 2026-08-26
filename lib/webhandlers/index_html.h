@@ -674,76 +674,626 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ESP32 • Command Center</title>
 <style>
-  :root { --bg: #23335d; --card: rgba(20, 25, 40, 0.7); --accent: #00f2ff; --accent-glow: rgba(0, 242, 255, 0.3); --text: #e2e8f0; --muted: #64748b; --danger: #ef4444; }
-  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 16px; min-height: 100vh; display: flex; flex-direction: column; gap: 16px; }
-  
-  /* Анімований фон */
-  body::before { content: ''; position: fixed; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(circle, var(--accent-glow) 0%, transparent 60%); opacity: 0.15; animation: pulse-bg 8s ease-in-out infinite; z-index: -1; pointer-events: none; }
-  @keyframes pulse-bg { 0%, 100% { transform: scale(1); opacity: 0.15; } 50% { transform: scale(1.1); opacity: 0.25; } }
+:root { 
+  --bg: #0a0e27; 
+  --sidebar: rgba(15, 23, 42, 0.95);
+  --card: rgba(20, 25, 40, 0.7); 
+  --accent: #00f2ff; 
+  --accent-glow: rgba(0, 242, 255, 0.3); 
+  --text: #e2e8f0; 
+  --muted: #64748b; 
+  --danger: #ef4444;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --border: rgba(255, 255, 255, 0.08);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body { 
+  font-family: 'Segoe UI', system-ui, sans-serif; 
+  background: var(--bg); 
+  color: var(--text); 
+  min-height: 100vh; 
+  display: flex;
+  overflow-x: hidden;
+}
 
-  .header { display: flex; justify-content: space-between; align-items: center; padding: 8px 4px; }
-  .header h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; background: linear-gradient(90deg, #fff, var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-  .status-badge { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid rgba(255,255,255,0.1); }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 8px var(--danger); transition: 0.3s; }
-  .dot.online { background: #10b981; box-shadow: 0 0 8px #10b981; }
+/* Анімований фон */
+body::before { 
+  content: ''; 
+  position: fixed; 
+  top: -50%; left: -50%; 
+  width: 200%; height: 200%; 
+  background: 
+    radial-gradient(circle at 20% 50%, rgba(0, 242, 255, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.1) 0%, transparent 50%);
+  opacity: 0.4;
+  animation: pulse-bg 15s ease-in-out infinite; 
+  z-index: -1; 
+  pointer-events: none; 
+}
+@keyframes pulse-bg { 
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.4; } 
+  50% { transform: scale(1.1) rotate(180deg); opacity: 0.6; } 
+}
 
-  .card { background: var(--card); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; padding: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
-  .card-title { font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 16px; font-weight: 700; display: flex; justify-content: space-between; }
+/* ========== БІЧНЕ МЕНЮ ========== */
+.sidebar {
+  width: 260px;
+  background: var(--sidebar);
+  backdrop-filter: blur(20px);
+  border-right: 1px solid var(--border);
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  left: 0;
+  top: 0;
+  height: 100vh;
+  z-index: 100;
+  transition: transform 0.3s ease;
+}
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 8px 24px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+.logo-icon {
+  width: 42px;
+  height: 42px;
+  background: linear-gradient(135deg, var(--accent), #8b5cf6);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  box-shadow: 0 4px 20px var(--accent-glow);
+}
+.sidebar-title {
+  font-size: 16px;
+  font-weight: 800;
+  background: linear-gradient(90deg, #fff, var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.sidebar-subtitle {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
 
-  /* Візуалізатор (імітація матриці) */
-  .visualizer { height: 120px; border-radius: 12px; background: linear-gradient(135deg, rgba(0,242,255,0.1), rgba(0,0,0,0)); border: 1px solid rgba(0,242,255,0.2); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; margin-bottom: 20px; }
-  .visualizer::after { content: 'MATRIX ACTIVE'; font-size: 14px; font-weight: 800; color: var(--accent); letter-spacing: 2px; opacity: 0.8; animation: text-flicker 3s infinite; }
-  @keyframes text-flicker { 0%, 100% { opacity: 0.8; } 50% { opacity: 0.4; } }
+.nav-section {
+  margin-bottom: 20px;
+}
+.nav-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+  padding: 0 12px;
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s;
+  cursor: pointer;
+  margin-bottom: 4px;
+}
+.nav-item:hover {
+  background: rgba(0, 242, 255, 0.08);
+  color: var(--accent);
+}
+.nav-item.active {
+  background: linear-gradient(135deg, rgba(0, 242, 255, 0.15), rgba(139, 92, 246, 0.15));
+  color: var(--accent);
+  border: 1px solid rgba(0, 242, 255, 0.2);
+}
+.nav-icon {
+  font-size: 18px;
+  width: 24px;
+  text-align: center;
+}
 
-  /* Повзунок яскравості */
-  .slider-wrap { display: flex; align-items: center; gap: 16px; }
-  .slider-wrap input { flex: 1; -webkit-appearance: none; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; outline: none; }
-  .slider-wrap input::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; background: var(--accent); border-radius: 50%; cursor: pointer; box-shadow: 0 0 15px var(--accent-glow); border: 2px solid #fff; }
-  .val-display { font-family: 'Courier New', monospace; font-size: 20px; font-weight: bold; color: var(--accent); min-width: 45px; text-align: right; }
+/* WiFi статус в меню */
+.wifi-status-mini {
+  margin-top: auto;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+.wifi-status-mini .status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+.wifi-status-mini .status-row:last-child { margin-bottom: 0; }
+.wifi-status-mini .label { color: var(--muted); }
+.wifi-status-mini .value { 
+  color: var(--text); 
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+}
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 8px var(--danger);
+  display: inline-block;
+  margin-right: 6px;
+}
+.status-dot.online {
+  background: var(--success);
+  box-shadow: 0 0 8px var(--success);
+  animation: pulse-dot 2s infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
 
-  /* Сітка ефектів */
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 10px; }
-  .btn { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: var(--text); padding: 14px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); text-align: center; line-height: 1.3; }
-  .btn:active { transform: scale(0.95); }
-  .btn.active { background: var(--accent); color: #000; border-color: var(--accent); box-shadow: 0 0 20px var(--accent-glow); font-weight: 800; }
-  .btn-off { background: rgba(239, 68, 68, 0.15); color: var(--danger); border-color: rgba(239, 68, 68, 0.3); }
-  .btn-off.active { background: var(--danger); color: #fff; box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); }
+/* ========== ОСНОВНИЙ КОНТЕНТ ========== */
+.main-content {
+  flex: 1;
+  margin-left: 260px;
+  padding: 24px;
+  min-height: 100vh;
+}
 
-  /* Системна інформація */
-  .sys-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .sys-item { background: rgba(0,0,0,0.2); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
-  .sys-label { font-size: 10px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
-  .sys-value { font-family: monospace; font-size: 14px; color: #fff; word-break: break-all; }
+/* Мобільне меню (бургер) */
+.burger {
+  display: none;
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  width: 44px;
+  height: 44px;
+  background: var(--sidebar);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  z-index: 200;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+}
+.burger span {
+  width: 20px;
+  height: 2px;
+  background: var(--text);
+  border-radius: 2px;
+  transition: 0.3s;
+}
+.overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 50;
+}
 
-  /* Toast сповіщення */
-  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--accent); color: #000; padding: 12px 24px; border-radius: 50px; font-weight: 700; font-size: 13px; opacity: 0; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: 0 10px 40px rgba(0,242,255,0.3); z-index: 999; white-space: nowrap; }
-  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+/* Заголовок */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.page-header h1 {
+  font-size: 26px;
+  font-weight: 800;
+  background: linear-gradient(90deg, #fff, var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.05);
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+}
+
+/* Карточки */
+.card {
+  background: var(--card);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+.card-title {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+  margin-bottom: 16px;
+  font-weight: 700;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Візуалізатор */
+.visualizer {
+  height: 100px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(0,242,255,0.1), rgba(0,0,0,0));
+  border: 1px solid rgba(0,242,255,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+.visualizer::after {
+  content: 'MATRIX ACTIVE';
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 2px;
+  opacity: 0.8;
+  animation: text-flicker 3s infinite;
+}
+@keyframes text-flicker {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 0.4; }
+}
+
+/* Повзунок */
+.slider-wrap {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.slider-wrap input {
+  flex: 1;
+  -webkit-appearance: none;
+  height: 6px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 3px;
+  outline: none;
+}
+.slider-wrap input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  background: var(--accent);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 15px var(--accent-glow);
+  border: 2px solid #fff;
+}
+.val-display {
+  font-family: 'Courier New', monospace;
+  font-size: 20px;
+  font-weight: bold;
+  color: var(--accent);
+  min-width: 45px;
+  text-align: right;
+}
+
+/* Сітка ефектів */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 10px;
+}
+.btn {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 14px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+.btn:active { transform: scale(0.95); }
+.btn.active {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+  box-shadow: 0 0 20px var(--accent-glow);
+  font-weight: 800;
+}
+.btn-off {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+.btn-off.active {
+  background: var(--danger);
+  color: #fff;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+}
+
+/* WiFi інформація */
+.wifi-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.wifi-item {
+  background: rgba(0,0,0,0.2);
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+.wifi-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  letter-spacing: 1px;
+}
+.wifi-value {
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  color: #fff;
+  word-break: break-all;
+  font-weight: 600;
+}
+
+/* Кнопки дій WiFi */
+.wifi-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 16px;
+}
+.action-btn {
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.action-btn.primary {
+  background: linear-gradient(135deg, var(--accent), #8b5cf6);
+  color: #000;
+}
+.action-btn.danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: var(--accent);
+  color: #000;
+  padding: 12px 24px;
+  border-radius: 50px;
+  font-weight: 700;
+  font-size: 13px;
+  opacity: 0;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  box-shadow: 0 10px 40px rgba(0,242,255,0.3);
+  z-index: 999;
+  white-space: nowrap;
+}
+.toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+.toast.error { background: var(--danger); color: #fff; }
+.toast.success { background: var(--success); color: #fff; }
+
+/* Модальне вікно підтвердження */
+.modal {
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+.modal.show { display: flex; }
+.modal-content {
+  background: var(--sidebar);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 28px;
+  max-width: 400px;
+  width: 90%;
+  text-align: center;
+}
+.modal-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+.modal-title {
+  font-size: 20px;
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+.modal-text {
+  color: var(--muted);
+  font-size: 14px;
+  margin-bottom: 24px;
+  line-height: 1.5;
+}
+.modal-buttons {
+  display: flex;
+  gap: 10px;
+}
+.modal-buttons button {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 14px;
+}
+.btn-cancel {
+  background: rgba(255,255,255,0.1);
+  color: var(--text);
+}
+.btn-confirm {
+  background: var(--danger);
+  color: #fff;
+}
+
+/* ========== АДАПТИВ ========== */
+@media (max-width: 768px) {
+  .burger { display: flex; }
+  .sidebar {
+    transform: translateX(-100%);
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  .overlay.show { display: block; }
+  .main-content {
+    margin-left: 0;
+    padding: 70px 16px 24px;
+  }
+  .page-header h1 { font-size: 20px; }
+  .wifi-grid { grid-template-columns: 1fr; }
+  .wifi-actions { grid-template-columns: 1fr; }
+}
 </style>
 </head>
 <body>
 
-  <div class="header">
-    <h1>LED COMMAND</h1>
+<!-- Бургер для мобільних -->
+<div class="burger" onclick="toggleSidebar()">
+  <span></span><span></span><span></span>
+</div>
+<div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+
+<!-- ========== БІЧНЕ МЕНЮ ========== -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <div class="logo-icon">💡</div>
+    <div>
+      <div class="sidebar-title">LED Panel</div>
+      <div class="sidebar-subtitle">Command Center</div>
+    </div>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Керування</div>
+    <a href="/" class="nav-item active">
+      <span class="nav-icon">🎛️</span>
+      <span>Dashboard</span>
+    </a>
+    <a href="/control" class="nav-item">
+      <span class="nav-icon">🎚️</span>
+      <span>Панель керування</span>
+    </a>
+    <a href="/pixel_art" class="nav-item">
+      <span class="nav-icon">🎨</span>
+      <span>Pixel Art</span>
+    </a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Система</div>
+    <a href="/wifi" class="nav-item">
+      <span class="nav-icon">📶</span>
+      <span>Wi-Fi Статус</span>
+    </a>
+    <a href="/setup" class="nav-item">
+      <span class="nav-icon">⚙️</span>
+      <span>Налаштування WiFi</span>
+    </a>
+  </div>
+
+  <!-- Міні-статус WiFi внизу меню -->
+  <div class="wifi-status-mini">
+    <div class="status-row">
+      <span class="label">Статус</span>
+      <span class="value"><span class="status-dot" id="miniDot"></span><span id="miniState">—</span></span>
+    </div>
+    <div class="status-row">
+      <span class="label">SSID</span>
+      <span class="value" id="miniSsid">—</span>
+    </div>
+    <div class="status-row">
+      <span class="label">IP</span>
+      <span class="value" id="miniIp">—</span>
+    </div>
+    <div class="status-row">
+      <span class="label">Сигнал</span>
+      <span class="value" id="miniRssi">—</span>
+    </div>
+  </div>
+</aside>
+
+<!-- ========== ОСНОВНИЙ КОНТЕНТ ========== -->
+<main class="main-content">
+  <div class="page-header">
+    <h1>🎛️ Dashboard</h1>
     <div class="status-badge">
-      <div class="dot" id="connDot"></div>
+      <div class="status-dot" id="connDot"></div>
       <span id="connText">Offline</span>
     </div>
   </div>
 
+  <!-- Візуалізатор + Яскравість -->
   <div class="card">
     <div class="visualizer" id="visualizer"></div>
-    
     <div class="card-title">
       <span>Яскравість</span>
       <span id="brightLabel">MASTER</span>
     </div>
     <div class="slider-wrap">
-      <input type="range" id="brightness" min="0" max="250" value="100" oninput="updateBrightLabel(this.value)" onchange="setBrightness(this.value)">
+      <input type="range" id="brightness" min="0" max="250" value="100" 
+             oninput="updateBrightLabel(this.value)" 
+             onchange="setBrightness(this.value)">
       <div class="val-display" id="brightVal">100</div>
     </div>
   </div>
 
+  <!-- Ефекти -->
   <div class="card">
     <div class="card-title">Бібліотека ефектів</div>
     <div class="grid">
@@ -765,96 +1315,160 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       <button class="btn" onclick="setEffect('/ws2812/pixel_noise', this)">Pixel Noise</button>
       <button class="btn" onclick="setEffect('/ws2812/glitch_columns', this)">Glitch Cols</button>
       <button class="btn" onclick="setEffect('/ws2812/psychedelic_flow', this)">Psychedelic</button>
-      <button class="btn btn-off" onclick="setEffect('/effects_fire/off', this)" style="grid-column: span 2;">⏹ ВИМКНУТИ ВСЕ</button>
+      <button class="btn btn-off" onclick="setEffect('/effects_fire/off', this)" style="grid-column: span 2;">⏹ ВИМКНУТИ</button>
     </div>
   </div>
 
+  <!-- WiFi інформація + Дії -->
   <div class="card">
-    <div class="card-title">Системний моніторинг</div>
-    <div class="sys-grid">
-      <div class="sys-item">
-        <div class="sys-label">Мережа (SSID)</div>
-        <div class="sys-value" id="sysSsid">—</div>
+    <div class="card-title">
+      <span>📶 Wi-Fi Інформація</span>
+      <span id="wifiModeBadge" style="color: var(--accent); font-size: 11px;">—</span>
+    </div>
+    <div class="wifi-grid">
+      <div class="wifi-item">
+        <div class="wifi-label">Мережа (SSID)</div>
+        <div class="wifi-value" id="sysSsid">—</div>
       </div>
-      <div class="sys-item">
-        <div class="sys-label">IP Адреса</div>
-        <div class="sys-value" id="sysIp">—</div>
+      <div class="wifi-item">
+        <div class="wifi-label">IP Адреса</div>
+        <div class="wifi-value" id="sysIp">—</div>
       </div>
-      <div class="sys-item">
-        <div class="sys-label">Сила сигналу</div>
-        <div class="sys-value" id="sysRssi">—</div>
+      <div class="wifi-item">
+        <div class="wifi-label">MAC Адреса</div>
+        <div class="wifi-value" id="sysMac">—</div>
       </div>
-      <div class="sys-item">
-        <div class="sys-label">Режим</div>
-        <div class="sys-value" id="sysMode">—</div>
+      <div class="wifi-item">
+        <div class="wifi-label">Сила сигналу</div>
+        <div class="wifi-value" id="sysRssi">—</div>
       </div>
     </div>
+    <div class="wifi-actions">
+      <button class="action-btn primary" onclick="location.href='/setup'">
+        ⚙️ Змінити WiFi
+      </button>
+      <button class="action-btn danger" onclick="showResetModal()">
+        🗑️ Скинути WiFi
+      </button>
+    </div>
   </div>
+</main>
 
-  <div class="toast" id="toast">Команду виконано</div>
+<!-- Toast -->
+<div class="toast" id="toast">Команду виконано</div>
+
+<!-- Модальне вікно підтвердження скидання -->
+<div class="modal" id="resetModal">
+  <div class="modal-content">
+    <div class="modal-icon">⚠️</div>
+    <div class="modal-title">Скинути WiFi?</div>
+    <div class="modal-text">
+      Всі збережені налаштування WiFi будуть видалені. 
+      Пристрій перезавантажиться і перейде в режим точки доступу (AP).
+    </div>
+    <div class="modal-buttons">
+      <button class="btn-cancel" onclick="closeResetModal()">Скасувати</button>
+      <button class="btn-confirm" onclick="resetWifi()">Скинути</button>
+    </div>
+  </div>
+</div>
 
 <script>
-  // Оновлення підпису яскравості без запиту до сервера (для плавності)
-  function updateBrightLabel(val) {
-    document.getElementById('brightVal').textContent = val;
-  }
+// ========== SIDEBAR ==========
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('overlay').classList.toggle('show');
+}
 
-  // Відправка команди яскравості
-  function setBrightness(val) {
-    fetch('/brightness?value=' + val).then(() => showToast('Яскравість: ' + val));
-  }
+// ========== ЯСКРАВІСТЬ ==========
+function updateBrightLabel(val) {
+  document.getElementById('brightVal').textContent = val;
+}
+function setBrightness(val) {
+  fetch('/brightness?value=' + val).then(() => showToast('Яскравість: ' + val, 'success'));
+}
 
-  // Відправка команди ефекту
-  function setEffect(url, btn) {
-    document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
-    if(btn) btn.classList.add('active');
-    
-    // Ефект мерехтіння візуалізатора при зміні
-    const viz = document.getElementById('visualizer');
-    viz.style.borderColor = 'rgba(255,255,255,0.5)';
-    setTimeout(() => viz.style.borderColor = 'rgba(0,242,255,0.2)', 300);
+// ========== ЕФЕКТИ ==========
+function setEffect(url, btn) {
+  document.querySelectorAll('.grid .btn').forEach(b => b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  const viz = document.getElementById('visualizer');
+  viz.style.borderColor = 'rgba(255,255,255,0.5)';
+  setTimeout(() => viz.style.borderColor = 'rgba(0,242,255,0.2)', 300);
+  fetch(url).then(() => showToast('Ефект активовано', 'success'));
+}
 
-    fetch(url).then(() => showToast('Ефект активований'));
-  }
+// ========== TOAST ==========
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
 
-  // Показ сповіщення
-  function showToast(msg) {
-    const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 1500);
-  }
-
-  // Фонове оновлення системної інформації (кожні 3 сек)
-  async function updateSystemInfo() {
-    try {
-      const res = await fetch('/api/wifi'); // Використовуємо твій існуючий API роут
-      const data = await res.json();
-      
-      const dot = document.getElementById('connDot');
-      const connText = document.getElementById('connText');
-      
-      if (data.state === 'Підключено' || data.state === 'CONNECTED') {
-        dot.classList.add('online');
-        connText.textContent = 'Online';
+// ========== WIFI МОДАЛКА ==========
+function showResetModal() {
+  document.getElementById('resetModal').classList.add('show');
+}
+function closeResetModal() {
+  document.getElementById('resetModal').classList.remove('show');
+}
+function resetWifi() {
+  closeResetModal();
+  showToast('Скидання налаштувань...', 'success');
+  fetch('/api/wifi/reset', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        showToast('✅ Перезавантаження...', 'success');
       } else {
-        dot.classList.remove('online');
-        connText.textContent = 'AP Mode';
+        showToast('❌ Помилка: ' + data.error, 'error');
       }
+    })
+    .catch(() => showToast('❌ Помилка з\'єднання', 'error'));
+}
 
-      document.getElementById('sysSsid').textContent = data.ssid || 'Немає';
-      document.getElementById('sysIp').textContent = data.ip;
-      document.getElementById('sysRssi').textContent = data.rssi + ' dBm';
-      document.getElementById('sysMode').textContent = data.mode;
-    } catch (e) {
-      // Якщо /api/wifi ще не налаштовано, ігноруємо помилку, щоб не ламати сторінку
-      console.log('Очікування даних системи...');
+// ========== ОНОВЛЕННЯ СИСТЕМНОЇ ІНФОРМАЦІЇ ==========
+async function updateSystemInfo() {
+  try {
+    const res = await fetch('/api/wifi');
+    const data = await res.json();
+    
+    // Головний статус
+    const dot = document.getElementById('connDot');
+    const connText = document.getElementById('connText');
+    const miniDot = document.getElementById('miniDot');
+    
+    if (data.state === 'Підключено') {
+      dot.classList.add('online');
+      miniDot.classList.add('online');
+      connText.textContent = 'Online';
+    } else {
+      dot.classList.remove('online');
+      miniDot.classList.remove('online');
+      connText.textContent = 'AP Mode';
     }
+    
+    // Основна інформація
+    document.getElementById('sysSsid').textContent = data.ssid || 'Немає';
+    document.getElementById('sysIp').textContent = data.ip;
+    document.getElementById('sysMac').textContent = data.mac;
+    document.getElementById('sysRssi').textContent = data.rssi + ' dBm';
+    document.getElementById('wifiModeBadge').textContent = data.mode;
+    
+    // Міні-статус в сайдбарі
+    document.getElementById('miniState').textContent = data.state === 'Підключено' ? 'Online' : 'AP';
+    document.getElementById('miniSsid').textContent = data.ssid || '—';
+    document.getElementById('miniIp').textContent = data.ip;
+    document.getElementById('miniRssi').textContent = data.rssi + ' dBm';
+  } catch (e) {
+    console.log('Очікування даних системи...');
   }
+}
 
-  // Запуск оновлення при завантаженні і кожні 3 секунди
-  updateSystemInfo();
-  setInterval(updateSystemInfo, 3000);
+// Запуск
+updateSystemInfo();
+setInterval(updateSystemInfo, 3000);
 </script>
 </body>
 </html>
@@ -1152,310 +1766,6 @@ const char WIFI_PAGE_HTML[] PROGMEM = R"rawliteral(
   }
   updateStatus();
   setInterval(updateStatus, 2000);
-</script>
-</body>
-</html>
-)rawliteral";
-
-// ==========================================
-// 🎨 Pixel Art Studio
-// ==========================================
-const char PIXEL_ART_HTML[] PROGMEM = R"rawliteral(
-<!DOCTYPE html>
-<html lang="uk">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ESP32 • Pixel Art Studio</title>
-<style>
-  :root { 
-    --bg: #0a0e27; 
-    --card: rgba(15, 23, 42, 0.8); 
-    --accent: #00d4ff; 
-    --text: #f1f5f9; 
-    --muted: #64748b;
-    --border: rgba(255, 255, 255, 0.08);
-  }
-  
-  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  
-  body { 
-    font-family: -apple-system, 'Segoe UI', sans-serif; 
-    background: var(--bg); 
-    color: var(--text); 
-    min-height: 100vh; 
-    padding: 20px;
-  }
-  
-  .container { max-width: 600px; margin: 0 auto; }
-  
-  .header { text-align: center; margin-bottom: 30px; }
-  .header h1 { 
-    font-size: 32px; font-weight: 800; 
-    background: linear-gradient(135deg, #00d4ff, #ff00ff);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  }
-  .subtitle { color: var(--muted); font-size: 14px; margin-top: 8px; }
-  
-  .card {
-    background: var(--card); backdrop-filter: blur(20px);
-    border: 1px solid var(--border); border-radius: 20px;
-    padding: 24px; margin-bottom: 20px;
-  }
-  
-  .card-title {
-    font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;
-    color: var(--muted); margin-bottom: 16px; font-weight: 700;
-  }
-  
-  /* Сітка малювання */
-  .canvas-container {
-    display: grid;
-    grid-template-columns: repeat(16, 1fr);
-    gap: 2px;
-    background: rgba(0, 0, 0, 0.5);
-    padding: 8px;
-    border-radius: 12px;
-    border: 2px solid var(--accent);
-    box-shadow: 0 0 30px rgba(0, 212, 255, 0.2);
-  }
-  
-  .pixel {
-    aspect-ratio: 1;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 2px;
-    cursor: crosshair;
-    transition: transform 0.1s;
-  }
-  
-  .pixel:hover { transform: scale(1.2); z-index: 10; }
-  .pixel.active { box-shadow: 0 0 8px currentColor; }
-  
-  /* Палітра */
-  .palette {
-    display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    gap: 8px;
-    margin-top: 16px;
-  }
-  
-  .color {
-    aspect-ratio: 1;
-    border-radius: 8px;
-    cursor: pointer;
-    border: 2px solid transparent;
-    transition: all 0.2s;
-  }
-  
-  .color:hover { transform: scale(1.1); }
-  .color.selected { border-color: #fff; box-shadow: 0 0 12px currentColor; }
-  
-  /* Інструменти */
-  .tools {
-    display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap;
-  }
-  
-  .tool-btn {
-    flex: 1; min-width: 80px; padding: 12px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--border);
-    border-radius: 10px; color: var(--text);
-    font-size: 13px; font-weight: 600;
-    cursor: pointer; transition: all 0.2s;
-  }
-  
-  .tool-btn:hover { background: rgba(0, 212, 255, 0.1); border-color: var(--accent); }
-  .tool-btn.active { background: var(--accent); color: #000; }
-  
-  /* Кнопки дій */
-  .actions {
-    display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 16px;
-  }
-  
-  .action-btn {
-    padding: 14px; background: linear-gradient(135deg, var(--accent), #8b5cf6);
-    border: none; border-radius: 10px; color: #000;
-    font-size: 14px; font-weight: 700; cursor: pointer;
-    transition: all 0.2s;
-  }
-  
-  .action-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3); }
-  .action-btn:active { transform: translateY(0); }
-  .action-btn.danger { background: linear-gradient(135deg, #ef4444, #dc2626); }
-  
-  /* Статус */
-  .status {
-    padding: 12px; border-radius: 10px; margin-top: 16px;
-    text-align: center; font-size: 13px; font-weight: 600;
-    display: none;
-  }
-  .status.show { display: block; animation: slideIn 0.3s; }
-  .status.success { background: rgba(16, 185, 129, 0.15); color: #10b981; }
-  .status.error { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
-  
-  @keyframes slideIn {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-</style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>🎨 Pixel Art Studio</h1>
-      <div class="subtitle">Малюй на сітці 16x16 та відправляй на LED матрицю</div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Полотно</div>
-      <div class="canvas-container" id="canvas"></div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Палітра</div>
-      <div class="palette" id="palette"></div>
-      
-      <div class="tools">
-        <button class="tool-btn active" data-tool="brush" onclick="setTool('brush')">🖌️ Пензлик</button>
-        <button class="tool-btn" data-tool="eraser" onclick="setTool('eraser')">🧹 Гумка</button>
-        <button class="tool-btn" data-tool="fill" onclick="setTool('fill')">🪣 Заповнити</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Дії</div>
-      <div class="actions">
-        <button class="action-btn" onclick="sendToLED()">📡 На матрицю</button>
-        <button class="action-btn danger" onclick="clearCanvas()">🗑️ Очистити</button>
-      </div>
-      <div class="status" id="status"></div>
-    </div>
-  </div>
-
-<script>
-const GRID_SIZE = 16;
-let currentColor = '#00d4ff';
-let currentTool = 'brush';
-let isDrawing = false;
-const pixels = [];
-
-// Палітра кольорів
-const colors = [
-  '#000000', '#ffffff', '#ff0000', '#00ff00',
-  '#0000ff', '#ffff00', '#ff00ff', '#00ffff',
-  '#ff8800', '#8800ff', '#00ff88', '#ff0088',
-  '#884400', '#440088', '#008844', '#880044'
-];
-
-// Ініціалізація
-function init() {
-  const canvas = document.getElementById('canvas');
-  const palette = document.getElementById('palette');
-  
-  // Створення сітки
-  for (let y = 0; y < GRID_SIZE; y++) {
-    for (let x = 0; x < GRID_SIZE; x++) {
-      const pixel = document.createElement('div');
-      pixel.className = 'pixel';
-      pixel.dataset.x = x;
-      pixel.dataset.y = y;
-      
-      pixel.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        isDrawing = true;
-        paintPixel(pixel);
-      });
-      
-      pixel.addEventListener('mouseenter', () => {
-        if (isDrawing) paintPixel(pixel);
-      });
-      
-      canvas.appendChild(pixel);
-      pixels.push(pixel);
-    }
-  }
-  
-  document.addEventListener('mouseup', () => isDrawing = false);
-  
-  // Створення палітри
-  colors.forEach((color, i) => {
-    const colorDiv = document.createElement('div');
-    colorDiv.className = 'color' + (i === 0 ? ' selected' : '');
-    colorDiv.style.background = color;
-    colorDiv.onclick = () => selectColor(color, colorDiv);
-    palette.appendChild(colorDiv);
-  });
-}
-
-function selectColor(color, element) {
-  currentColor = color;
-  document.querySelectorAll('.color').forEach(c => c.classList.remove('selected'));
-  element.classList.add('selected');
-}
-
-function setTool(tool) {
-  currentTool = tool;
-  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-  document.querySelector(`[data-tool="${tool}"]`).classList.add('active');
-}
-
-function paintPixel(pixel) {
-  if (currentTool === 'brush') {
-    pixel.style.background = currentColor;
-    pixel.style.color = currentColor;
-  } else if (currentTool === 'eraser') {
-    pixel.style.background = 'rgba(255, 255, 255, 0.05)';
-    pixel.style.color = 'transparent';
-  } else if (currentTool === 'fill') {
-    pixels.forEach(p => {
-      p.style.background = currentColor;
-      p.style.color = currentColor;
-    });
-  }
-}
-
-function clearCanvas() {
-  pixels.forEach(p => {
-    p.style.background = 'rgba(255, 255, 255, 0.05)';
-    p.style.color = 'transparent';
-  });
-  showStatus('Полотно очищено', 'success');
-}
-
-async function sendToLED() {
-  const pixelData = [];
-  pixels.forEach(p => {
-    const color = p.style.background || 'rgba(255, 255, 255, 0.05)';
-    pixelData.push(color);
-  });
-  
-  showStatus('Відправка на матрицю...', 'success');
-  
-  try {
-    const res = await fetch('/api/pixel_art', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pixels: pixelData })
-    });
-    
-    if (res.ok) {
-      showStatus('✅ Надіслано на LED матрицю!', 'success');
-    } else {
-      showStatus('❌ Помилка відправки', 'error');
-    }
-  } catch (e) {
-    showStatus('❌ Помилка з\'єднання', 'error');
-  }
-}
-
-function showStatus(msg, type) {
-  const s = document.getElementById('status');
-  s.textContent = msg;
-  s.className = 'status show ' + type;
-  setTimeout(() => s.classList.remove('show'), 2000);
-}
-
-init();
 </script>
 </body>
 </html>
