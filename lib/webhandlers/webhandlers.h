@@ -24,4 +24,11 @@ void handleControlPage();
 void handleScanNetworks();
 void handleResetWifi();
 
+// Нові API для розширеного Dashboard
+void handleSetColor();
+void handleSetSpeed();
+void handleReboot();
+void handleSystemInfoApi();
+
+
 #endif

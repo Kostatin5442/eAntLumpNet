@@ -123,3 +123,110 @@ void handleResetWifi() {
   delay(1500);
   ESP.restart();
 }
+
+//========================================================
+// ==========================================
+// 🎨 Встановлення статичного кольору
+// ==========================================
+void handleSetColor() {
+  if (!server.hasArg("value")) {
+    server.send(400, "text/plain", "Missing value param");
+    return;
+  }
+  String hex = server.arg("value");
+  Serial.println("🎨 Колір: #" + hex);
+  
+  // Тут викликаємо функцію встановлення кольору на матриці
+  // (потрібно додати в main.cpp або окремий модуль)
+  extern void setStaticColor(const String &hex);
+  setStaticColor(hex);
+  
+  server.send(200, "text/plain", "OK");
+}
+
+// ==========================================
+// ⚡ Встановлення швидкості ефектів
+// ==========================================
+void handleSetSpeed() {
+  if (!server.hasArg("value")) {
+    server.send(400, "text/plain", "Missing value param");
+    return;
+  }
+  int speed = server.arg("value").toInt();
+  speed = constrain(speed, 10, 200);
+  Serial.println("⚡ Швидкість: " + String(speed));
+  
+  extern void setEffectSpeed(int speed);
+  setEffectSpeed(speed);
+  
+  server.send(200, "text/plain", "OK");
+}
+
+// ==========================================
+// 🔄 Перезавантаження пристрою
+// ==========================================
+void handleReboot() {
+  server.send(200, "application/json", "{\"success\":true}");
+  delay(500);
+  ESP.restart();
+}
+
+// ==========================================
+// 💻 API: Повна системна інформація (JSON)
+// ==========================================
+void handleSystemInfoApi() {
+  // WiFi дані
+  String state = (WiFi.status() == WL_CONNECTED) ? "Підключено" : "Не підключено";
+  String mode = "Невідомо";
+  if (WiFi.getMode() == WIFI_AP) mode = "Точка доступу (AP)";
+  else if (WiFi.getMode() == WIFI_STA) mode = "Клієнт (STA)";
+  else if (WiFi.getMode() == WIFI_AP_STA) mode = "AP + STA";
+  String ip = (WiFi.getMode() == WIFI_AP) ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
+
+  // Uptime
+  unsigned long uptimeMs = millis();
+  unsigned long sec = uptimeMs / 1000;
+  unsigned long min = sec / 60;
+  unsigned long hr = min / 60;
+  unsigned long days = hr / 24;
+  String uptime = String(days) + "д " + String(hr % 24) + "г " + String(min % 60) + "хв";
+
+  // Heap & CPU
+  uint32_t freeHeap = ESP.getFreeHeap() / 1024;
+  uint32_t cpuFreq = ESP.getCpuFreqMHz();
+  
+  // Chip model
+  String chipModel = "ESP32";
+  #if CONFIG_IDF_TARGET_ESP32C3
+    chipModel = "ESP32-C3";
+  #elif CONFIG_IDF_TARGET_ESP32S2
+    chipModel = "ESP32-S2";
+  #elif CONFIG_IDF_TARGET_ESP32S3
+    chipModel = "ESP32-S3";
+  #endif
+
+  // Поточний ефект (потрібно оголосити як extern)
+  extern String getCurrentEffectName();
+  String effectName = getCurrentEffectName();
+
+  String json = "{";
+  json += "\"wifi\":{";
+  json += "\"state\":\"" + state + "\",";
+  json += "\"ssid\":\"" + String(WiFi.SSID()) + "\",";
+  json += "\"ip\":\"" + ip + "\",";
+  json += "\"mac\":\"" + WiFi.macAddress() + "\",";
+  json += "\"rssi\":" + String(WiFi.RSSI()) + ",";
+  json += "\"mode\":\"" + mode + "\"";
+  json += "},";
+  json += "\"system\":{";
+  json += "\"uptime\":\"" + uptime + "\",";
+  json += "\"heap\":" + String(freeHeap) + ",";
+  json += "\"cpu\":" + String(cpuFreq) + ",";
+  json += "\"chip\":\"" + chipModel + "\"";
+  json += "},";
+  json += "\"currentEffect\":\"" + effectName + "\"";
+  json += "}";
+
+  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  server.send(200, "application/json", json);
+}

@@ -12,6 +12,11 @@
 #include "wifi_manager.h" //Функції для кеування wifi
 #include "index_html.h"//Сторінки для WEB
 #include "webhandlers.h"//функції керування через WEB
+
+// ==========================================
+// ⚡ Встановлення швидкості ефектів
+// ==========================================
+volatile int effectDelay = WS2812B_EFFECTS_FIRE_FPS;
 //Глобальні змінні оголошення для класів
 WebServer server(80);
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
@@ -270,6 +275,13 @@ void setup() {
   server.on("/api/scan", HTTP_GET, handleScanNetworks);
   server.on("/api/save", HTTP_POST, handleSaveWifi);
   server.on("/api/wifi/reset", HTTP_POST, handleResetWifi);
+
+  // Розширені API для Dashboard Pro
+  server.on("/color", HTTP_GET, handleSetColor);
+  server.on("/speed", HTTP_GET, handleSetSpeed);
+  server.on("/api/reboot", HTTP_POST, handleReboot);
+  server.on("/api/system", HTTP_GET, handleSystemInfoApi);
+
   server.begin();
 }
 // LOOP
@@ -299,7 +311,7 @@ void loop() {
     case CHAT: updateScrollingText(); break;
     default: rainbowStepUpdate(); break; //змінено для усіх Виключень з правил (запуск ефекту при увімкненні)
   }
-  delay(WS2812B_EFFECTS_FIRE_FPS);
+  delay(effectDelay);
 }
 // Ініціалізація зірок
 void initStars() {
@@ -640,3 +652,53 @@ void drawFrame() {
     }
   }
 }
+
+// ==========================================
+// 🎨 Встановлення статичного кольору
+// ==========================================
+void setStaticColor(const String &hex) {
+  uint32_t color = hexToColor(hex);
+  for (int i = 0; i < strip.numPixels(); i++) {
+    strip.setPixelColor(i, color);
+  }
+  strip.show();
+  currentEffect = OFF; // Вимикаємо поточний ефект
+}
+
+
+
+void setEffectSpeed(int speed) {
+  // speed: 10 (повільно) - 200 (швидко)
+  // Перетворюємо на затримку: більше speed = менше delay
+  effectDelay = map(speed, 10, 200, 200, 10);
+}
+
+// ==========================================
+// 📛 Назва поточного ефекту (для API)
+// ==========================================
+String getCurrentEffectName() {
+  switch (currentEffect) {
+    case RAINBOW: return "Rainbow";
+    case FIRE: return "Fire";
+    case FLASHING: return "Flashing";
+    case STARFIELD: return "Starfield";
+    case COLOR_WAVES: return "Color Waves";
+    case METEOR: return "Meteor";
+    case RIPPLE: return "Ripple";
+    case MATRIX_RAIN: return "Matrix Rain";
+    case AURORA: return "Aurora";
+    case GALAXY: return "Galaxy";
+    case TUNNEL: return "Tunnel";
+    case SPIRAL: return "Spiral";
+    case NEBULA: return "Nebula";
+    case SPARKLES: return "Sparkles";
+    case OFF: return "OFF";
+    case GLITCH_BARS: return "Glitch Bars";
+    case PIXEL_NOISE: return "Pixel Noise";
+    case GLITCH_COLUMNS: return "Glitch Columns";
+    case PSYCHEDELIC_FLOW: return "Psychedelic";
+    case CHAT: return "Chat";
+    default: return "Unknown";
+  }
+}
+
