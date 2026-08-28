@@ -5,10 +5,13 @@
 #include <WebServer.h>
 #include <WiFi.h>
 #include <ESPmDNS.h>
-
 // mDNS налаштування
-extern const char* mdns_hostname;
-extern const char* mdns_instance;
+//extern const char* mdns_hostname;
+//extern const char* mdns_instance;
+extern Adafruit_NeoPixel strip;
+extern WebServer server;
+
+
 extern WebServer server;
 extern bool isAPMode;
 // === LED МАТРИЦЯ ===
@@ -18,7 +21,6 @@ extern bool isAPMode;
 #define TOUCH_PIN     4
 #define MATRIX_WIDTH  16
 #define MATRIX_HEIGHT 16
-
 extern Adafruit_NeoPixel strip;
 
 // === ЗОРЯНЕ НЕБО ===

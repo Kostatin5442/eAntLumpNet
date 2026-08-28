@@ -5,14 +5,13 @@
 #include <WiFi.h>
 #include <Ws2812b_effects_fire.h>
 #include <Ws2812b_effects_fire_2.h>
-#include <Font6x8.h>
 #include <math.h>
 #include <Preferences.h>
 #include <config.h>
 #include "wifi_manager.h" //Функції для кеування wifi
 #include "index_html.h"//Сторінки для WEB
 #include "webhandlers.h"//функції керування через WEB
-
+#include "matrix_utils.h"
 // ==========================================
 // ⚡ Встановлення швидкості ефектів
 // ==========================================
@@ -20,9 +19,7 @@ volatile int effectDelay = WS2812B_EFFECTS_FIRE_FPS;
 //Глобальні змінні оголошення для класів
 WebServer server(80);
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
-// Прототипи функцій (Function prototypes)
-int xyToIndex(int x, int y);
-void drawCharOnStrip(int16_t x, char c, uint32_t color);
+//=================================================================
 void initStars();
 void handleDraw();
 void handleChat();
@@ -43,6 +40,7 @@ void glitchBarsStepUpdate();
 void pixelNoiseStepUpdate();
 void glitchColumnsStepUpdate();
 void psychedelicFlowStepUpdate();
+//=========================================================
 Effect currentEffect = NONE;
 // Налаштування чату
 String currentMessage = "";
@@ -76,21 +74,7 @@ void updateScrollingText() {
     scrollX = 16;
   }
 }
-void drawCharOnStrip(int16_t x, char c, uint32_t color) {
-  if (c < 32 || c > 127) return;
-  const uint8_t* glyph = Font6x8 + (c - 32) * 6;
-  for (int col = 0; col < 6; col++) {
-    uint8_t column = pgm_read_byte(&glyph[col]);
-    for (int row = 0; row < 8; row++) {
-      if (column & (1 << row)) {
-        int ledIndex = xyToIndex(x + col, row + 4);
-        if (ledIndex >= 0 && ledIndex < LED_COUNT) {
-          strip.setPixelColor(ledIndex, color);
-        }
-      }
-    }
-  }
-}
+
 //Обробник запиту на отримання статсу WiFi
 void getAntStatusLux(){
 //Поки порожня функція, яка може бути розширена для отримання статусу WiFi та інших параметрів.
@@ -109,17 +93,8 @@ uint32_t hexToColor(String hex) {
   uint8_t b = number & 0xFF;
   return strip.Color(r, g, b);
 }
-int xyToIndex(int x, int y) {
-  if (x < 0 || x >= 16 || y < 0 || y >= 16) return -1;
-  x = 15 - x;
-  int index;
-  if (y % 2 == 0) {
-    index = y * 16 + x;
-  } else {
-    index = y * 16 + (15 - x);
-  }
-  return index;
-}
+
+
 uint32_t Wheel(byte WheelPos) {
   WheelPos = 255 - WheelPos;
   if (WheelPos < 85) {
@@ -633,26 +608,6 @@ void handleChat() {
     server.send(400, "text/plain", "Помилка: параметр 'text' відсутній");
   }
 }
-//Функція drawFrame буде перенесена в окрему бібліотеку, щоб уникнути перевантаження основного файлу main.cpp. Вона відповідає за малювання рамки на LED-матриці з використанням різних кольорів для кожного стовпця.
-void drawFrame() {
-  for (int x = 0; x < 16; x++) {
-    int idx = xyToIndex(x, 0);
-    if (idx >= 0) {
-      if (x % 3 == 0) strip.setPixelColor(idx, strip.Color(0, 255, 0));
-      else if (x % 3 == 1) strip.setPixelColor(idx, strip.Color(0, 0, 255));
-      else strip.setPixelColor(idx, strip.Color(255, 255, 0));
-    }
-  }
-  for (int x = 0; x < 16; x++) {
-    int idx = xyToIndex(x, 15);
-    if (idx >= 0) {
-      if (x % 3 == 0) strip.setPixelColor(idx, strip.Color(0, 255, 0));
-      else if (x % 3 == 1) strip.setPixelColor(idx, strip.Color(0, 0, 255));
-      else strip.setPixelColor(idx, strip.Color(255, 255, 0));
-    }
-  }
-}
-
 // ==========================================
 // 🎨 Встановлення статичного кольору
 // ==========================================
@@ -664,15 +619,11 @@ void setStaticColor(const String &hex) {
   strip.show();
   currentEffect = OFF; // Вимикаємо поточний ефект
 }
-
-
-
 void setEffectSpeed(int speed) {
   // speed: 10 (повільно) - 200 (швидко)
   // Перетворюємо на затримку: більше speed = менше delay
   effectDelay = map(speed, 10, 200, 200, 10);
 }
-
 // ==========================================
 // 📛 Назва поточного ефекту (для API)
 // ==========================================
@@ -701,4 +652,3 @@ String getCurrentEffectName() {
     default: return "Unknown";
   }
 }
-
