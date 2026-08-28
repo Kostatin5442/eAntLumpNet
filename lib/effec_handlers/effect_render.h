@@ -2,10 +2,6 @@
 #define EFFECT_RENDER_H
 #include <Arduino.h>
 
-
-
-
-
 // Прототипи ефектів
 void starfieldStepUpdate();
 void colorWavesStepUpdate();

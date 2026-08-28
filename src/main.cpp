@@ -11,7 +11,7 @@
 #include "wifi_manager.h" //Функції для кеування wifi
 #include "index_html.h"//Сторінки для WEB
 #include "webhandlers.h"//функції керування через WEB
-#include "matrix_utils.h"
+#include "matrix_utils.h"//утиліти для роботи з матрицею
 // ==========================================
 // ⚡ Встановлення швидкості ефектів
 // ==========================================
@@ -74,7 +74,6 @@ void updateScrollingText() {
     scrollX = 16;
   }
 }
-
 //Обробник запиту на отримання статсу WiFi
 void getAntStatusLux(){
 //Поки порожня функція, яка може бути розширена для отримання статусу WiFi та інших параметрів.
@@ -93,8 +92,6 @@ uint32_t hexToColor(String hex) {
   uint8_t b = number & 0xFF;
   return strip.Color(r, g, b);
 }
-
-
 uint32_t Wheel(byte WheelPos) {
   WheelPos = 255 - WheelPos;
   if (WheelPos < 85) {
