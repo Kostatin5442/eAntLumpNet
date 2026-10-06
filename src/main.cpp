@@ -7,16 +7,18 @@
 #include <Ws2812b_effects_fire_2.h>
 #include <math.h>
 #include <Preferences.h>
-#include <config.h>
-#include "wifi_manager.h" //Функції для кеування wifi
-#include "index_html.h"//Сторінки для WEB
-#include "webhandlers.h"//функції керування через WEB
+#include "stats.h" //для роботи зі статистикою
+#include "config.h"
 #include "matrix_utils.h"//утиліти для роботи з матрицею
+#include "wifi_manager.h" //Функції для кеування wifi
+#include "webhandlers.h"//функції керування через WEB
+#include "index_html.h"//Сторінки для WEB
 // ==========================================
 // ⚡ Встановлення швидкості ефектів
 // ==========================================
 volatile int effectDelay = WS2812B_EFFECTS_FIRE_FPS;
 //Глобальні змінні оголошення для класів
+
 WebServer server(80);
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 //=================================================================
@@ -165,6 +167,14 @@ void handleColorWaves() {
 void setup() {
   Serial.begin(115200);
   initWiFi();//Ініціалізація Wifi. Відкриття Центру налаштування
+  initNTP();
+  initStats();
+  startSession();
+  
+  // Реєстрація роутів статистики
+  server.on("/stats", HTTP_GET, handleStatsPage);
+  server.on("/api/stats", HTTP_GET, handleStatsAPI);
+  server.on("/api/stats/csv", HTTP_GET, handleStatsCSV);
   // === Initialize LED strip ===
   strip.begin();
   strip.setBrightness(100);
@@ -256,10 +266,48 @@ void setup() {
 
   server.begin();
 }
+
+
+// Допоміжна функція для отримання назви ефекту
+String getEffectName(Effect effect) {
+  switch(effect) {
+    case RAINBOW: return "Rainbow";
+    case FIRE: return "Fire";
+    case FLASHING: return "Flashing";
+    case STARFIELD: return "Starfield";
+    case COLOR_WAVES: return "ColorWaves";
+    case METEOR: return "Meteor";
+    case RIPPLE: return "Ripple";
+    case MATRIX_RAIN: return "Matrix";
+    case AURORA: return "Aurora";
+    case GALAXY: return "Galaxy";
+    case TUNNEL: return "Tunnel";
+    case SPIRAL: return "Spiral";
+    case NEBULA: return "Nebula";
+    case SPARKLES: return "Sparkles";
+    case OFF: return "OFF";
+    case GLITCH_BARS: return "GlitchBars";
+    case PIXEL_NOISE: return "PixelNoise";
+    case GLITCH_COLUMNS: return "GlitchColumns";
+    case PSYCHEDELIC_FLOW: return "Psychedelic";
+    case CHAT: return "Chat";
+    case PIXEL_ART: return "PixelArt";
+    default: return "Unknown";
+  }
+}
 // LOOP
 void loop() {
   server.handleClient();
 
+
+    // Відстеження зміни ефекту
+  static Effect lastEffect = NONE;
+  if (currentEffect != lastEffect) {
+    String effectName = getEffectName(currentEffect);
+    recordEffectSwitch(effectName);
+    lastEffect = currentEffect;
+  }
+  
   switch (currentEffect) {
     case RAINBOW: rainbowStepUpdate(); break;
     case FIRE: fireStepUpdate(); break;
@@ -281,10 +329,25 @@ void loop() {
     case GLITCH_COLUMNS: glitchColumnsStepUpdate(); break;
     case PSYCHEDELIC_FLOW: psychedelicFlowStepUpdate(); break;
     case CHAT: updateScrollingText(); break;
+ //   case OLVIYA: updateOLVIYA();break;
+    case STATIC_COLOR:break;
     default: rainbowStepUpdate(); break; //змінено для усіх Виключень з правил (запуск ефекту при увімкненні)
   }
   delay(effectDelay);
 }
+
+//void updateOLVIYA(){
+ // strip.clear();
+ // for(int i = 0; i<256; i++)
+ // {
+
+
+
+ // }
+
+
+
+//}
 // Ініціалізація зірок
 void initStars() {
   for (int i = 0; i < STAR_COUNT; i++) {
@@ -300,7 +363,7 @@ void starfieldStepUpdate() {
     if (stars[i].brightness > STAR_FADE) {
       stars[i].brightness -= STAR_FADE;
     } else {
-      stars[i].brightness = random(100, 255);
+      stars[i].brightness = random(20, 255);
       stars[i].x = random(0, 16);
       stars[i].y = random(0, 16);
     }
@@ -614,7 +677,7 @@ void setStaticColor(const String &hex) {
     strip.setPixelColor(i, color);
   }
   strip.show();
-  currentEffect = OFF; // Вимикаємо поточний ефект
+  currentEffect = STATIC_COLOR; // Встановлюємо статичний колір
 }
 void setEffectSpeed(int speed) {
   // speed: 10 (повільно) - 200 (швидко)
@@ -646,6 +709,7 @@ String getCurrentEffectName() {
     case GLITCH_COLUMNS: return "Glitch Columns";
     case PSYCHEDELIC_FLOW: return "Psychedelic";
     case CHAT: return "Chat";
+    case STATIC_COLOR: return "Static Color"; // ✅ ДОДАЄМО ТУТ
     default: return "Unknown";
   }
 }

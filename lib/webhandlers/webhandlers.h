@@ -1,13 +1,14 @@
 #ifndef WEBHANDLERS_H
 #define WEBHANDLERS_H
+#include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
 #include <WebServer.h>
 #include <WiFi.h>
 #include <Preferences.h>
 
-//
+
 // Оголошення зовнішніх змінних
-extern Adafruit_NeoPixel strip;
+//extern Adafruit_NeoPixel strip;
 
 extern WebServer server;
 extern Preferences wifiPrefs;
@@ -29,6 +30,11 @@ void handleSetColor();
 void handleSetSpeed();
 void handleReboot();
 void handleSystemInfoApi();
+
+//Функ для час напрацювання
+void handleStatsPage();
+void handleStatsAPI();
+void handleStatsCSV();
 
 
 #endif

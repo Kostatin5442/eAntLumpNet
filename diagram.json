@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "author": "Anonymous maker",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-c3-devkitm-1", "id": "esp", "top": 345.3, "left": 121.02, "attrs": {} },
+    {
+      "type": "wokwi-led-matrix",
+      "id": "matrix1",
+      "top": -65.2,
+      "left": -297.8,
+      "attrs": { "rows": "16", "cols": "16", "pixelShape": "circle", "layout": "serpentine" }
+    }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "matrix1:VDD", "esp:5V.2", "red", [ "v0" ] ],
+    [ "matrix1:VSS", "esp:GND.5", "black", [ "v0" ] ],
+    [ "matrix1:DIN", "esp:8", "green", [ "v48", "h240", "v-105.6" ] ]
+  ],
+  "dependencies": {}
+}

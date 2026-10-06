@@ -1,13 +1,14 @@
 #include "wifi_manager.h"
 #include <Preferences.h>
 #include <ESPmDNS.h>
+#include <WiFi.h>
+
 
 //Pre
 Preferences wifiPrefs;
 bool isAPMode = false;
 const char* mdns_hostname = "ledpanel";
 const char* mdns_instance = "ESP32 LED Panel";
-
 
 void initWiFi() {
     String savedSsid = "";
@@ -61,7 +62,6 @@ void initWiFi() {
         Serial.println(WiFi.softAPIP());
     }
 }
-
 bool loadSavedWifi(String &ssid, String &password) {
 //Відкрити простір імен "wifi" тільки читання true
 //Спочатку wifiPrefs.begin("wifi", true)
@@ -92,7 +92,6 @@ bool loadSavedWifi(String &ssid, String &password) {
     wifiPrefs.end();//Завершуємо роботу з пам'ятью 
     return ssid.length()>0;//Якщо ssid пустий повертаємо false. Якщо є повертаємо ІСТИНА.
 }
-
 bool saveWifi(const String &ssid, const String &password) {
     // Відкриваємо простір імен "wifi" для запису (false)
     if (!wifiPrefs.begin("wifi", false)) {
@@ -104,14 +103,12 @@ bool saveWifi(const String &ssid, const String &password) {
     wifiPrefs.end();
     return true;
 }
-
 void clearSavedWifi() {
     if (wifiPrefs.begin("wifi", false)) {
         wifiPrefs.clear();
         wifiPrefs.end();
     }
 }
-
 bool isWifiConfigured() {
     bool configured = false;
     if (wifiPrefs.begin("wifi", true)) {
@@ -120,4 +117,3 @@ bool isWifiConfigured() {
     }
     return configured;
 }
-

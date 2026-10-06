@@ -1,6 +1,197 @@
 #ifndef INDEX_HTML_H
 #define INDEX_HTML_H
 #include <pgmspace.h>
+
+
+
+const char STATS_PAGE_HTML[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESP32 • Статистика</title>
+<style>
+  :root { --bg: #f5f0eb; --card: #fdf8f3; --text: #4a4a4a; --peach: #f4b8a0; --mint: #b8d8d0; --yellow: #f4d9a0; --blue: #b8c8e8; --pink: #f4c8d8; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); padding: 20px; }
+  .container { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 28px; margin-bottom: 20px; }
+  .card { background: var(--card); border-radius: 20px; padding: 24px; margin-bottom: 20px; box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
+  .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+  .stat-box { background: var(--card); border-radius: 16px; padding: 20px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+  .stat-value { font-size: 32px; font-weight: 800; color: var(--peach); }
+  .stat-label { font-size: 12px; color: #8b8b8b; margin-top: 4px; }
+  .controls { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  select, button { padding: 10px 16px; border-radius: 12px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; }
+  select { background: #fff; }
+  .btn-primary { background: var(--peach); color: #fff; }
+  .btn-secondary { background: var(--mint); color: #fff; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 10px; text-align: left; border-bottom: 1px solid rgba(0,0,0,0.05); }
+  th { background: rgba(0,0,0,0.03); font-weight: 700; }
+  .effect-bar { height: 8px; background: var(--peach); border-radius: 4px; }
+  .chart-container { display: flex; gap: 20px; flex-wrap: wrap; }
+  .chart-box { flex: 1; min-width: 300px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>📊 Статистика використання</h1>
+  
+  <div class="stats-grid">
+    <div class="stat-box">
+      <div class="stat-value" id="totalUptime">0</div>
+      <div class="stat-label">Годин напрацювання</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-value" id="totalSessions">0</div>
+      <div class="stat-label">Сесій</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-value" id="currentSession">0</div>
+      <div class="stat-label">Хвилин у поточній сесії</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="controls">
+      <select id="monthSelect"></select>
+      <button class="btn-primary" onclick="loadStats()">🔄 Оновити</button>
+      <button class="btn-secondary" onclick="downloadCSV()">📥 Експорт CSV</button>
+    </div>
+  </div>
+
+  <div class="chart-container">
+    <div class="card chart-box">
+      <h3>🎨 Популярність ефектів</h3>
+      <div id="effectsChart" style="margin-top: 16px;"></div>
+    </div>
+    <div class="card chart-box">
+      <h3>📅 Останні сесії</h3>
+      <div style="max-height: 300px; overflow-y: auto; margin-top: 16px;">
+        <table id="sessionsTable">
+          <thead><tr><th>Дата</th><th>Тривалість</th><th>Ефектів</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>📋 Детальний лог ефектів</h3>
+    <div style="max-height: 400px; overflow-y: auto; margin-top: 16px;">
+      <table id="effectsTable">
+        <thead><tr><th>Ефект</th><th>Початок</th><th>Тривалість (хв)</th><th>Частка</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentData = null;
+
+async function loadStats() {
+  const month = document.getElementById('monthSelect').value;
+  const res = await fetch('/api/stats?month=' + month);
+  currentData = await res.json();
+  
+  document.getElementById('totalUptime').textContent = (currentData.total_uptime / 3600).toFixed(1);
+  document.getElementById('totalSessions').textContent = currentData.sessions_count;
+  
+  renderEffectsChart(currentData.effects_summary);
+  renderSessionsTable(currentData);
+  renderEffectsTable(currentData);
+}
+
+function renderEffectsChart(effects) {
+  const container = document.getElementById('effectsChart');
+  container.innerHTML = '';
+  
+  const total = Object.values(effects).reduce((a, b) => a + b, 0);
+  const colors = ['#f4b8a0', '#b8d8d0', '#f4d9a0', '#b8c8e8', '#f4c8d8', '#d8b8f4'];
+  let i = 0;
+  
+  for (const [name, duration] of Object.entries(effects)) {
+    const percent = (duration / total * 100).toFixed(1);
+    const div = document.createElement('div');
+    div.style.marginBottom = '12px';
+    div.innerHTML = `
+      <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px;">
+        <span><strong>${name}</strong></span>
+        <span>${percent}% (${(duration/60).toFixed(0)} хв)</span>
+      </div>
+      <div style="background: rgba(0,0,0,0.05); border-radius: 4px; overflow: hidden;">
+        <div class="effect-bar" style="width: ${percent}%; background: ${colors[i % colors.length]}"></div>
+      </div>
+    `;
+    container.appendChild(div);
+    i++;
+  }
+}
+
+function renderSessionsTable(data) {
+  const tbody = document.querySelector('#sessionsTable tbody');
+  tbody.innerHTML = '';
+  // Показати останні 10 сесій
+  const sessions = data.sessions.slice(-10).reverse();
+  sessions.forEach(s => {
+    const row = tbody.insertRow();
+    row.innerHTML = `
+      <td>${new Date(s.start * 1000).toLocaleString('uk-UA')}</td>
+      <td>${(s.duration / 60).toFixed(0)} хв</td>
+      <td>${s.effects.length}</td>
+    `;
+  });
+}
+
+function renderEffectsTable(data) {
+  const tbody = document.querySelector('#effectsTable tbody');
+  tbody.innerHTML = '';
+  const total = Object.values(data.effects_summary).reduce((a, b) => a + b, 0);
+  
+  for (const [name, duration] of Object.entries(data.effects_summary)) {
+    const row = tbody.insertRow();
+    row.innerHTML = `
+      <td><strong>${name}</strong></td>
+      <td>-</td>
+      <td>${(duration / 60).toFixed(1)}</td>
+      <td>${(duration / total * 100).toFixed(1)}%</td>
+    `;
+  }
+}
+
+function downloadCSV() {
+  const month = document.getElementById('monthSelect').value;
+  window.location.href = '/api/stats/csv?month=' + month;
+}
+
+// Заповнити селект місяцями
+function populateMonths() {
+  const select = document.getElementById('monthSelect');
+  const now = new Date();
+  for (let i = 0; i < 24; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}_${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = d.toLocaleString('uk-UA', { month: 'long', year: 'numeric' });
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = label;
+    select.appendChild(opt);
+  }
+}
+
+populateMonths();
+loadStats();
+setInterval(() => {
+  document.getElementById('currentSession').textContent = Math.floor(performance.now() / 60000);
+}, 60000);
+</script>
+</body>
+</html>
+)rawliteral";
+
 //= ================================================
 //=📡 =СТИЛЬНА сторінка налаштування WiFi (PROGMEM)=
 //= ================================================

@@ -1,3 +1,10 @@
+/*
+Центральний Хаб. Містить усі глобальні налаштування. структури і переліки
+а також оголошення extern глобальних змін
+Підключає необхіні бібліотеки для того щоб кожен файл мав долступ до базових типів
+
+*/
+
 #ifndef CONFIG_H
 #define CONFIG_H
 #include <Arduino.h>
@@ -6,12 +13,9 @@
 #include <WiFi.h>
 #include <ESPmDNS.h>
 // mDNS налаштування
-//extern const char* mdns_hostname;
-//extern const char* mdns_instance;
+extern const char* mdns_hostname;
+extern const char* mdns_instance;
 extern Adafruit_NeoPixel strip;
-extern WebServer server;
-
-
 extern WebServer server;
 extern bool isAPMode;
 // === LED МАТРИЦЯ ===
@@ -21,8 +25,6 @@ extern bool isAPMode;
 #define TOUCH_PIN     4
 #define MATRIX_WIDTH  16
 #define MATRIX_HEIGHT 16
-extern Adafruit_NeoPixel strip;
-
 // === ЗОРЯНЕ НЕБО ===
 #define STAR_COUNT    10
 #define METEOR_CHANCE 0.05
@@ -66,6 +68,17 @@ enum Effect {
   PSYCHEDELIC_FLOW,
   CHAT,
   PIXEL_ART,
+  STATIC_COLOR,
+  //OLVIYA,
+ // KROV,
+ // MAC,
+ // Petricor,
+ // Nika,
+ // VN,
+ // ROV,
+ // KROV,
+ // OL,
+ // oLa,
   OFF
 };
 

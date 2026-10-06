@@ -1,21 +1,35 @@
-#include <Arduino.h>
+/*
+Цей файл є типовим файлом для налаштування ESP32 в web режимі
+
+*/
 #include "webhandlers.h"
 #include "index_html.h"
 #include "wifi_manager.h"
-// ==========================================
-// 🔍 Читання збережених WiFi даних
-/*==========================================
-bool loadSavedWifi(String &ssid, String &password) {
-  wifiPrefs.begin("wifi", true);
-  bool configured = wifiPrefs.getBool("configured", false);
-  if (configured) {
-    ssid = wifiPrefs.getString("ssid", "");
-    password = wifiPrefs.getString("pass", "");
-  }
-  wifiPrefs.end();
-  return configured;
+#include "stats.h" 
+
+
+//ДЛя напрацювання
+void handleStatsPage() {
+  server.send_P(200, "text/html", STATS_PAGE_HTML);
 }
-*/
+
+void handleStatsAPI() {
+  String month = server.arg("month");
+  if (month.isEmpty()) month = getCurrentMonthKey();
+  
+  String json = getStatsJSON(month);
+  server.send(200, "application/json", json);
+}
+
+void handleStatsCSV() {
+  String month = server.arg("month");
+  if (month.isEmpty()) month = getCurrentMonthKey();
+  
+  String csv = exportCSV(month);
+  server.sendHeader("Content-Disposition", "attachment; filename=stats_" + month + ".csv");
+  server.send(200, "text/csv", csv);
+}
+//Кінець напрацювання 
 // 📡 Сторінка налаштування
 // ==========================================
 void handleSetupPage() {
