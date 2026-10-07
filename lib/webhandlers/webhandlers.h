@@ -36,5 +36,7 @@ void handleStatsPage();
 void handleStatsAPI();
 void handleStatsCSV();
 
+void handleDebugInfo();
 
+void handleEndSession();
 #endif

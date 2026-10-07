@@ -5,9 +5,16 @@
 #include <vector>
 #include <map>
 
+// Додай цю змінну на початку файлу
+static uint32_t lastAutoSave = 0;
+
 // ===== NTP =====
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", 7200, 60000); // UTC+2 (Київ)
+
+
+
+
 
 void initNTP() {
   timeClient.begin();
@@ -50,9 +57,22 @@ void initStats() {
   
   String monthKey = getCurrentMonthKey();
   loadMonthlyStats(monthKey);
+  
+  // ✅ Спочатку скидаємо sessionStart
+  sessionStart = 0;
+  sessionActive = false;
+  
+  // ✅ Намагаємось відновити pending
+  if (loadPendingEffects()) {
+    sessionActive = true;
+    Serial.println("▶️ Відновлено активну сесію з " + String(pendingEffects.size()) + " ефектів");
+  } else {
+    // Нова сесія
+    startSession();
+  }
+  
   cleanupOldStats();
 }
-
 String getCurrentMonthKey() {
   timeClient.update();
   time_t now = timeClient.getEpochTime();
@@ -141,6 +161,7 @@ void saveMonthlyStats() {
   serializeJson(doc, file);
   file.close();
   Serial.println("💾 Збережено статистику за " + currentStats.month);
+  loadMonthlyStats(currentStats.month);
 }
 
 // ===== Сесії =====
@@ -158,7 +179,13 @@ void endSession() {
   uint32_t now = getUnixTime();
   uint32_t duration = now - sessionStart;
   
-  recordEffectSwitch(currentEffectName, true); // Тепер це працює
+  // ✅ ЗАХИСТ: якщо sessionStart = 0, duration буде гігантським
+  if (sessionStart == 0 || duration > 86400) {
+    Serial.println("⚠️ sessionStart=0 або duration>доба, скидаємо duration");
+    duration = 0;
+  }
+  
+  recordEffectSwitch(currentEffectName, false);
   
   SessionRecord session;
   session.startTime = sessionStart;
@@ -171,11 +198,11 @@ void endSession() {
   
   sessionActive = false;
   pendingEffects.clear();
+  clearPendingEffects();
   
   saveMonthlyStats();
   Serial.println("⏹️ Сесія завершена: " + String(duration) + " сек");
 }
-
 // ===== Ефекти =====
 void recordEffectSwitch(const String& effectName, bool forceSave) {
   uint32_t now = getUnixTime();
@@ -187,6 +214,10 @@ void recordEffectSwitch(const String& effectName, bool forceSave) {
     rec.startTime = lastEffectSwitch;
     rec.duration = duration;
     pendingEffects.push_back(rec);
+
+    // ✅ Зберігаємо в файл після кожного перемикання
+    savePendingEffects();
+
   }
   
   currentEffectName = effectName;
@@ -289,3 +320,122 @@ void cleanupOldStats() {
 
 uint32_t getTotalUptime() { return currentStats.totalUptime; }
 uint32_t getSessionDuration() { return sessionActive ? (getUnixTime() - sessionStart) : 0; }
+
+// Додай цю функцію для автозбереження статистики
+void autoSaveStats() {
+  uint32_t now = getUnixTime();
+  if (now - lastAutoSave > 300) { // Кожні 5 хвилин (300 секунд)
+    if (sessionActive && !pendingEffects.empty()) {
+      saveMonthlyStats();
+      lastAutoSave = now;
+      Serial.println("💾 Автозбереження статистики");
+    }
+  }
+}
+
+// ===== Getter-функції для відладки =====
+bool isSessionActive() {
+  return sessionActive;
+}
+
+uint32_t getPendingEffectsCount() {
+  return pendingEffects.size();
+}
+
+// ПЕРЕЙМЕНОВАНО, щоб не конфліктувати з main.cpp
+String getStatsCurrentEffectName() {
+  return currentEffectName;
+}
+
+uint32_t getCurrentTotalUptime() {
+  return currentStats.totalUptime;
+}
+
+uint32_t getCurrentSessionsCount() {
+  return currentStats.sessions.size();
+}
+
+
+// Збереження pendingEffects у файл
+void savePendingEffects() {
+  File file = LittleFS.open("/stats/pending.json", "w");
+  if (!file) return;
+  
+  JsonDocument doc;
+  JsonArray arr = doc.to<JsonArray>();
+  
+  for (const auto& e : pendingEffects) {
+    JsonObject obj = arr.add<JsonObject>();
+    obj["name"] = e.name;
+    obj["start"] = e.startTime;
+    obj["duration"] = e.duration;
+  }
+  
+  // Зберігаємо також час старту сесії
+  doc["sessionStart"] = sessionStart;
+  
+  serializeJson(doc, file);
+  file.close();
+}
+
+// Завантаження pendingEffects з файлу
+bool loadPendingEffects() {
+  File file = LittleFS.open("/stats/pending.json", "r");
+  if (!file) return false;
+  
+  JsonDocument doc;
+  DeserializationError error = deserializeJson(doc, file);
+  file.close();
+  
+  if (error) {
+    Serial.println("❌ Помилка читання pending.json: " + String(error.c_str()));
+    return false;
+  }
+  
+  pendingEffects.clear();
+  
+  JsonArray arr = doc.as<JsonArray>();
+  for (JsonObject obj : arr) {
+    EffectRecord rec;
+    rec.name = obj["name"].as<String>();
+    rec.startTime = obj["start"].as<uint32_t>();
+    rec.duration = obj["duration"].as<uint32_t>();
+    pendingEffects.push_back(rec);
+  }
+  
+  // ✅ Відновлюємо sessionStart з останнього ефекту
+  if (!pendingEffects.empty()) {
+    sessionStart = pendingEffects[0].startTime;
+    lastEffectSwitch = pendingEffects.back().startTime + pendingEffects.back().duration;
+  }
+  
+  Serial.println("✅ Відновлено " + String(pendingEffects.size()) + " ефектів, sessionStart=" + String(sessionStart));
+  return true;
+}
+// Видалення pending файлу
+void clearPendingEffects() {
+  LittleFS.remove("/stats/pending.json");
+}
+
+void resetStats() {
+  currentStats.totalUptime = 0;
+  currentStats.sessions.clear();
+  pendingEffects.clear();
+  sessionActive = false;
+  sessionStart = 0;
+  
+  // Видалити всі файли статистики
+  File dir = LittleFS.open("/stats", "r");
+  if (dir) {
+    File file = dir.openNextFile();
+    while (file) {
+      String name = file.name();
+      String path = "/stats/" + name;
+      LittleFS.remove(path);
+      file = dir.openNextFile();
+    }
+  }
+  
+  saveMonthlyStats();
+  Serial.println("🗑️ Статистику повністю скинуто");
+}

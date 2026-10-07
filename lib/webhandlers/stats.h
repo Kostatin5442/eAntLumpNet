@@ -33,6 +33,11 @@ struct MonthlyStats {
 void initStats();
 void startSession();
 void endSession();
+void savePendingEffects();
+bool loadPendingEffects();
+void clearPendingEffects();
+void resetStats();
+
 void recordEffectSwitch(const String& effectName, bool forceSave = false); // ВИПРАВЛЕНО: додано 2-й аргумент
 String getCurrentMonthKey();
 String getStatsJSON(const String& month);
@@ -40,7 +45,7 @@ String exportCSV(const String& month);
 void cleanupOldStats();
 uint32_t getTotalUptime();
 uint32_t getSessionDuration();
-
+void autoSaveStats();
 // Внутрішні функції, які мають бути видимі
 void loadMonthlyStats(const String& month);
 void saveMonthlyStats();
@@ -49,5 +54,12 @@ String formatTimestamp(uint32_t ts);
 // NTP 
 void initNTP();
 uint32_t getUnixTime();
+
+// Getter-функції для відладки
+bool isSessionActive();
+uint32_t getPendingEffectsCount();
+String getStatsCurrentEffectName();
+uint32_t getCurrentTotalUptime();
+uint32_t getCurrentSessionsCount();
 
 #endif

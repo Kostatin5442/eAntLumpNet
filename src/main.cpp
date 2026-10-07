@@ -169,9 +169,98 @@ void setup() {
   initWiFi();//Ініціалізація Wifi. Відкриття Центру налаштування
   initNTP();
   initStats();
+   
+  // Якщо була активна сесія, завершити її
+  if (getSessionDuration() > 0) {
+    Serial.println("️ Виявлено незавершену сесію, завершуємо...");
+    endSession();
+  }
   startSession();
+  //Реєстрація роута для дебагу
+  server.on("/api/debug", HTTP_GET, handleDebugInfo);
+  server.on("/api/end_session", HTTP_POST, handleEndSession);
+//тестова
+// Тестовий роут для примусового завершення сесії
+server.on("/api/force_save", HTTP_GET, []() {
+  String result = "";
   
+  // 1. Завершити сесію
+  endSession();
+  result += "✅ Сесію завершено\n";
+  
+  // 2. Перевірити, чи файл існує
+  String month = getCurrentMonthKey();
+  String path = "/stats/" + month + ".json";
+  
+  if (LittleFS.exists(path)) {
+    result += "✅ Файл існує: " + path + "\n";
+    
+    // 3. Прочитати вміст
+    File file = LittleFS.open(path, "r");
+    if (file) {
+      result += "📄 Вміст файлу:\n";
+      result += file.readString();
+      file.close();
+    }
+  } else {
+    result += "❌ Файл НЕ існує: " + path + "\n";
+  }
+  
+  server.send(200, "text/plain", result);
+});
+
+// Детальний debug для статистики
+server.on("/api/stats_debug", HTTP_GET, []() {
+  String result = "=== СТАТИСТИКА DEBUG ===\n\n";
+  
+  // 1. Стан у пам'яті
+  result += "📊 У ПАМ'ЯТІ:\n";
+  result += "  Сесія активна: " + String(isSessionActive() ? "ТАК" : "НІ") + "\n";
+  result += "  Тривалість сесії: " + String(getSessionDuration()) + " сек\n";
+  result += "  Ефектів у черзі (RAM): " + String(getPendingEffectsCount()) + "\n";
+  result += "  Поточний ефект: " + getStatsCurrentEffectName() + "\n";
+  result += "  Збережено сесій: " + String(getCurrentSessionsCount()) + "\n\n";
+  
+  // 2. Файл pending.json
+  result += "📁 ФАЙЛ pending.json:\n";
+  if (LittleFS.exists("/stats/pending.json")) {
+    result += "  ✅ Файл існує\n";
+    File file = LittleFS.open("/stats/pending.json", "r");
+    if (file) {
+      result += "  Вміст:\n";
+      result += "  " + file.readString() + "\n";
+      file.close();
+    }
+  } else {
+    result += "   Файл НЕ існує\n";
+  }
+  result += "\n";
+  
+  // 3. Файл місячної статистики
+  String month = getCurrentMonthKey();
+  String path = "/stats/" + month + ".json";
+  result += "📁 ФАЙЛ " + path + ":\n";
+  if (LittleFS.exists(path)) {
+    result += "  ✅ Файл існує\n";
+    File file = LittleFS.open(path, "r");
+    if (file) {
+      result += "  Вміст:\n";
+      result += "  " + file.readString() + "\n";
+      file.close();
+    }
+  } else {
+    result += "  ❌ Файл НЕ існує\n";
+  }
+  
+  server.send(200, "text/plain", result);
+});
+
+//була тестова функція для перевірки роботи автозбереження статистики
   // Реєстрація роутів статистики
+  server.on("/api/reset_stats", HTTP_GET, []() {
+  resetStats();
+  server.send(200, "text/plain", "Stats reset");
+});
   server.on("/stats", HTTP_GET, handleStatsPage);
   server.on("/api/stats", HTTP_GET, handleStatsAPI);
   server.on("/api/stats/csv", HTTP_GET, handleStatsCSV);
@@ -307,7 +396,9 @@ void loop() {
     recordEffectSwitch(effectName);
     lastEffect = currentEffect;
   }
-  
+  // Автозбереження статистики
+  autoSaveStats();
+
   switch (currentEffect) {
     case RAINBOW: rainbowStepUpdate(); break;
     case FIRE: fireStepUpdate(); break;

@@ -244,3 +244,23 @@ void handleSystemInfoApi() {
   server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   server.send(200, "application/json", json);
 }
+
+
+void handleDebugInfo() {
+  String json = "{";
+  json += "\"sessionActive\":" + String(isSessionActive() ? "true" : "false") + ",";
+  json += "\"sessionDuration\":" + String(getSessionDuration()) + ",";
+  json += "\"pendingEffectsCount\":" + String(getPendingEffectsCount()) + ",";
+  json += "\"currentEffect\":\"" + getStatsCurrentEffectName() + "\",";
+  json += "\"totalUptime\":" + String(getCurrentTotalUptime()) + ",";
+  json += "\"sessionsCount\":" + String(getCurrentSessionsCount());
+  json += "}";
+  
+  server.send(200, "application/json", json);
+}
+
+
+void handleEndSession() {
+  endSession();
+  server.send(200, "text/plain", "Session ended");
+}

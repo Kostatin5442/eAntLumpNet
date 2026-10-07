@@ -134,20 +134,14 @@ function renderEffectsChart(effects) {
 function renderSessionsTable(data) {
   const tbody = document.querySelector('#sessionsTable tbody');
   tbody.innerHTML = '';
-  
-  // ДОДАЙ ЦЮ ПЕРЕВІРКУ
-  if (!data.sessions || data.sessions.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#8b8b8b;">Немає сесій за цей місяць</td></tr>';
-    return;
-  }
-  
+  // Показати останні 10 сесій
   const sessions = data.sessions.slice(-10).reverse();
   sessions.forEach(s => {
     const row = tbody.insertRow();
     row.innerHTML = `
       <td>${new Date(s.start * 1000).toLocaleString('uk-UA')}</td>
       <td>${(s.duration / 60).toFixed(0)} хв</td>
-      <td>${s.effects ? s.effects.length : 0}</td>
+      <td>${s.effects.length}</td>
     `;
   });
 }
@@ -193,43 +187,7 @@ loadStats();
 setInterval(() => {
   document.getElementById('currentSession').textContent = Math.floor(performance.now() / 60000);
 }, 60000);
-
-// Додай цю функцію в кінець скрипта
-async function showDebug() {
-  const res = await fetch('/api/debug');
-  const data = await res.json();
-  
-  const panel = document.getElementById('debugPanel');
-  const content = document.getElementById('debugContent');
-  
-  panel.style.display = 'block';
-  content.innerHTML = `
-    <div>📊 Сесія активна: <strong>${data.sessionActive}</strong></div>
-    <div>⏱️ Тривалість сесії: <strong>${data.sessionDuration} сек</strong></div>
-    <div>📝 Ефектів у черзі: <strong>${data.pendingEffectsCount}</strong></div>
-    <div> Поточний ефект: <strong>${data.currentEffect}</strong></div>
-    <div>💾 Загальне напрацювання: <strong>${data.totalUptime} сек</strong></div>
-    <div>📁 Збережено сесій: <strong>${data.sessionsCount}</strong></div>
-  `;
-}
-
-function toggleDebug() {
-  const panel = document.getElementById('debugPanel');
-  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-}
-
-// Показуй debug при завантаженні
-window.onload = () => {
-  populateMonths();
-  loadStats();
-  showDebug(); // ← ДОДАЙ ЦЕ
-};
 </script>
-<div id="debugPanel" style="margin-top: 30px; padding: 20px; background: #f0f0f0; border-radius: 12px; display: none;">
-  <h3>🔍 Відладочна інформація</h3>
-  <div id="debugContent" style="font-family: monospace; font-size: 12px;"></div>
-  <button onclick="toggleDebug()" style="margin-top: 10px; padding: 8px 16px; cursor: pointer;">Приховати</button>
-</div>
 </body>
 </html>
 )rawliteral";
