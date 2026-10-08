@@ -167,7 +167,7 @@ void handleColorWaves() {
 void setup() {
   Serial.begin(115200);
   initWiFi();//Ініціалізація Wifi. Відкриття Центру налаштування
-  initNTP();
+  initTime();
   initStats();
    
   // Якщо була активна сесія, завершити її
@@ -340,13 +340,12 @@ server.on("/api/stats_debug", HTTP_GET, []() {
   // API для отримання даних сторінкою (без перезавантаження)
   server.on("/api/wifi", HTTP_GET, handleWifiStatusApi);
     // Веб-панель керування (безпечна для додатка)
-  server.on("/control", HTTP_GET, handleControlPage);
+  server.on("/control", HTTP_GET, handleStatsPage);
     // === WiFi Setup Portal ===
   server.on("/setup", HTTP_GET, handleSetupPage);
   server.on("/api/scan", HTTP_GET, handleScanNetworks);
   server.on("/api/save", HTTP_POST, handleSaveWifi);
   server.on("/api/wifi/reset", HTTP_POST, handleResetWifi);
-
   // Розширені API для Dashboard Pro
   server.on("/color", HTTP_GET, handleSetColor);
   server.on("/speed", HTTP_GET, handleSetSpeed);
@@ -355,8 +354,6 @@ server.on("/api/stats_debug", HTTP_GET, []() {
 
   server.begin();
 }
-
-
 // Допоміжна функція для отримання назви ефекту
 String getEffectName(Effect effect) {
   switch(effect) {
@@ -426,19 +423,6 @@ void loop() {
   }
   delay(effectDelay);
 }
-
-//void updateOLVIYA(){
- // strip.clear();
- // for(int i = 0; i<256; i++)
- // {
-
-
-
- // }
-
-
-
-//}
 // Ініціалізація зірок
 void initStars() {
   for (int i = 0; i < STAR_COUNT; i++) {
@@ -447,7 +431,7 @@ void initStars() {
     stars[i].brightness = random(50, 255);
   }
 }
-//Функція беде перенесена в окремий модуль, щоб уникнути перевантаження основного файлу main.cpp. Вона відповідає за оновлення стану зоряного неба та метеорів на LED-матриці.  
+//Функція буде перенесена в окремий модуль, щоб уникнути перевантаження основного файлу main.cpp. Вона відповідає за оновлення стану зоряного неба та метеорів на LED-матриці.  
 void starfieldStepUpdate() {
   strip.clear();
   for (int i = 0; i < STAR_COUNT; i++) {
@@ -495,28 +479,50 @@ void colorWavesStepUpdate() {
 //Функція має бути перенесена в окремий модуль, щоб уникнути перевантаження основного файлу main.cpp. Вона відповідає за оновлення стану ефекту метеорного дощу на LED-матриці.
 void meteorRainStepUpdate() {
   static int pos = 0;
-  static int meteorSize = 4;
-  static int decay = 64;
-  static int speed = 1;
+  static int decayFactor = 200; // Чим більше число (до 255), тим довше і плавніший хвіст
   
+  // 1. Плавне затухання всіх пікселів (створює ефект хвоста)
   for (int i = 0; i < NUM_LEDS; i++) {
     uint32_t c = strip.getPixelColor(i);
     uint8_t r = (c >> 16) & 0xFF;
     uint8_t g = (c >> 8) & 0xFF;
     uint8_t b = c & 0xFF;
-    r = (r <= 10) ? 0 : (r - r * decay / 256);
-    g = (g <= 10) ? 0 : (g - g * decay / 256);
-    b = (b <= 10) ? 0 : (b - b * decay / 256);
+
+    // Зменшуємо яскравість. Якщо канал <= 2, обнуляємо його, щоб уникнути "брудних" залишків
+    r = (r > 2) ? ((r * decayFactor) >> 8) : 0;
+    g = (g > 2) ? ((g * decayFactor) >> 8) : 0;
+    b = (b > 2) ? ((b * decayFactor) >> 8) : 0;
+
     strip.setPixelColor(i, r, g, b);
   }
   
+  // 2. Реалістичний градієнт метеора (від ядра до кінця хвоста)
+  uint32_t meteorColors[] = {
+    strip.Color(255, 255, 255), // 0: Біле розжарене ядро
+    strip.Color(255, 255, 180), // 1: Гарячий жовто-білий
+    strip.Color(255, 220, 80),  // 2: Яскраво-жовтий
+    strip.Color(255, 150, 20),  // 3: Помаранчевий
+    strip.Color(220, 70, 0),    // 4: Червоно-помаранчевий
+    strip.Color(150, 20, 0),    // 5: Темно-червоний
+    strip.Color(80, 5, 0),      // 6: Тьмяно-червоний
+    strip.Color(30, 0, 0)       // 7: Майже чорний (згасаючий край)
+  };
+  
+  int meteorSize = sizeof(meteorColors) / sizeof(meteorColors[0]);
+
+  // 3. Малюємо нову голову метеора
   for (int j = 0; j < meteorSize; j++) {
     int index = (pos - j + NUM_LEDS) % NUM_LEDS;
-    strip.setPixelColor(index, strip.Color(255, 255 - j * 60, 100));
+    strip.setPixelColor(index, meteorColors[j]);
   }
+  
   strip.show();
-  pos += speed;
-  if (pos >= NUM_LEDS) pos = 0;
+  
+  // 4. Рух метеора
+  pos += 1; // Швидкість (1 піксель за крок)
+  if (pos >= NUM_LEDS) {
+    pos = 0;
+  }
 }
 //Функція має бути перенесена в окремий модуль, щоб уникнути перевантаження основного файлу main.cpp. Вона відповідає за оновлення стану ефекту хвиль на LED-матриці.
 void rippleStepUpdate() {
@@ -671,18 +677,97 @@ void turnOffStepUpdate() {
 }
 //Функція має бути перенесена в окремий модуль, щоб уникнути перевантаження основного файлу main.cpp. Вона відповідає за оновлення стану ефекту "глітч барів" на LED-матриці.
 void glitchBarsStepUpdate() {
-  strip.clear();
-  int barHeight = random(2, 5);
-  int barStart = random(0, 16 - barHeight);
-  uint32_t color = strip.Color(random(255), random(255), random(255));
-  for (int y = barStart; y < barStart + barHeight; y++) {
+  static float blobX[5] = {3, 8, 12, 6, 10};
+  static float blobY[5] = {4, 8, 12, 10, 6};
+  static float blobVX[5] = {0.02, -0.03, 0.025, -0.02, 0.015};
+  static float blobVY[5] = {-0.015, 0.02, -0.025, 0.018, -0.022};
+  static float blobRadius[5] = {3.5, 4.0, 3.8, 4.2, 3.6};
+  
+  // Рухаємо "бульбашки"
+  for (int i = 0; i < 5; i++) {
+    blobX[i] += blobVX[i];
+    blobY[i] += blobVY[i];
+    
+    // Відбиваємо від стінок з невеликим випадковим відхиленням
+    if (blobX[i] < 0 || blobX[i] > 15) {
+      blobVX[i] = -blobVX[i] + random(-10, 10) * 0.001;
+      blobX[i] = constrain(blobX[i], 0, 15);
+    }
+    if (blobY[i] < 0 || blobY[i] > 15) {
+      blobVY[i] = -blobVY[i] + random(-10, 10) * 0.001;
+      blobY[i] = constrain(blobY[i], 0, 15);
+    }
+    
+    // Повільна зміна радіуса для органічності
+    blobRadius[i] = 3.5 + sin(millis() * 0.0005 + i) * 0.8;
+  }
+  
+  // Малюємо кожен піксель
+  for (int y = 0; y < 16; y++) {
     for (int x = 0; x < 16; x++) {
-      int index = y * 16 + x;
-      strip.setPixelColor(index, color);
+      float totalInfluence = 0;
+      float closestDist = 1000;
+      
+      // Metaballs алгоритм - сума впливу всіх бульбашок
+      for (int i = 0; i < 5; i++) {
+        float dx = x - blobX[i];
+        float dy = y - blobY[i];
+        float dist = sqrt(dx * dx + dy * dy);
+        
+        if (dist < closestDist) closestDist = dist;
+        
+        // Вплив обернено пропорційний квадрату відстані
+        float influence = (blobRadius[i] * blobRadius[i]) / (dist * dist + 0.1);
+        totalInfluence += influence;
+      }
+      
+      // Визначаємо колір та яскравість
+      if (totalInfluence > 1.0) {
+        // Всередині лави - яскравий градієнт для 3D ефекту
+        float intensity = constrain((totalInfluence - 1.0) * 0.5, 0, 1);
+        
+        // 3D ефект через освітлення
+        float lightX = 8; // Джерело світла
+        float lightY = 4;
+        float lightDist = sqrt((x - lightX) * (x - lightX) + (y - lightY) * (y - lightY));
+        float lightFactor = 1.0 - constrain(lightDist / 20.0, 0, 0.5);
+        
+        intensity = intensity * (0.7 + lightFactor * 0.3);
+        
+        // Градієнт від темно-червоного через помаранчевий до яскраво-жовтого
+        uint8_t r, g, b;
+        if (intensity < 0.3) {
+          // Темно-червоний
+          r = 150 + intensity * 350;
+          g = 20 + intensity * 100;
+          b = 0;
+        } else if (intensity < 0.6) {
+          // Помаранчевий
+          float t = (intensity - 0.3) / 0.3;
+          r = 255;
+          g = 50 + t * 150;
+          b = t * 30;
+        } else {
+          // Яскраво-жовтий/білий
+          float t = (intensity - 0.6) / 0.4;
+          r = 255;
+          g = 200 + t * 55;
+          b = 30 + t * 150;
+        }
+        
+        strip.setPixelColor(y * 16 + x, r, g, b);
+      } else {
+        // Темний фон з легким відблиском
+        float bgIntensity = totalInfluence * 0.3;
+        uint8_t r = bgIntensity * 40;
+        uint8_t g = bgIntensity * 10;
+        uint8_t b = bgIntensity * 5;
+        strip.setPixelColor(y * 16 + x, r, g, b);
+      }
     }
   }
+  
   strip.show();
-  delay(50);
 }
 //Функція має бути перенесена в окремий модуль, щоб уникнути перевантаження основного файлу main.cpp. Вона відповідає за оновлення стану ефекту "піксельного шуму" на LED-матриці.
 void pixelNoiseStepUpdate() {

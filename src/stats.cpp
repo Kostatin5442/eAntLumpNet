@@ -1,53 +1,76 @@
 #include "stats.h"
 #include <time.h>
-#include <WiFiUdp.h>
-#include <NTPClient.h>
 #include <vector>
 #include <map>
 
-// Додай цю змінну на початку файлу
-static uint32_t lastAutoSave = 0;
-
-// ===== NTP =====
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", 7200, 60000); // UTC+2 (Київ)
-
-
-
-
-
-void initNTP() {
-  timeClient.begin();
-  timeClient.update();
-  Serial.println("🕐 NTP час: " + timeClient.getFormattedTime());
+// =================================================================
+// Час
+// =================================================================
+void initTime() {
+  configTime(2 * 3600, 0, "pool.ntp.org", "time.nist.gov");
+  
+  struct tm timeinfo;
+  int retries = 0;
+  while (!getLocalTime(&timeinfo) && retries < 10) {
+    delay(500);
+    retries++;
+  }
+  
+  if (retries < 10) {
+    char timeStr[64];
+    strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", &timeinfo);
+    Serial.println("🕐 NTP час: " + String(timeStr));
+  }
 }
 
-uint32_t getUnixTime() {
-  timeClient.update();
-  return timeClient.getEpochTime();
+uint64_t getUnixTime() {
+  struct tm timeinfo;
+  if (getLocalTime(&timeinfo)) {
+    return mktime(&timeinfo);
+  }
+  return millis() / 1000;
 }
 
-String formatTimestamp(uint32_t ts) {
-  time_t t = ts;
+String formatTimestamp(uint64_t ts) {
+  time_t t = (time_t)ts;
   struct tm* tm_info = localtime(&t);
   char buf[32];
   strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", tm_info);
   return String(buf);
 }
 
-// ===== Змінні стану =====
-static MonthlyStats currentStats;
-static uint32_t sessionStart = 0;
-static uint32_t lastEffectSwitch = 0;
-static String currentEffectName = "OFF";
-static bool sessionActive = false;
-static std::vector<EffectRecord> pendingEffects; // Перенесено вгору
+String getCurrentMonthKey() {
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    return "1970_01";
+  }
+  char buf[16];
+  sprintf(buf, "%04d_%02d", timeinfo.tm_year + 1900, timeinfo.tm_mon + 1);
+  return String(buf);
+}
 
-// ===== Ініціалізація =====
+// =================================================================
+// Змінні стану (тільки в RAM!)
+// =================================================================
+static MonthlyStats currentStats;
+static uint64_t sessionStart = 0;
+static bool sessionActive = false;
+static String currentEffectName = "OFF";
+static uint64_t currentEffectStartTime = 0;
+static std::vector<EffectRecord> currentSessionEffects;
+static uint64_t lastAutoSave = 0;
+
+// =================================================================
+// Ініціалізація
+// =================================================================
 void initStats() {
-  if (!LittleFS.begin(true)) {
-    Serial.println("❌ Помилка LittleFS!");
-    return;
+  if (!LittleFS.begin(false)) {
+    Serial.println("⚠️ LittleFS не вдалося змонтувати. Форматування...");
+    LittleFS.format();
+    if (!LittleFS.begin(false)) {
+      Serial.println("❌ LittleFS не вдалося ініціалізувати!");
+      return;
+    }
   }
   Serial.println("✅ LittleFS ініціалізовано");
   
@@ -58,31 +81,112 @@ void initStats() {
   String monthKey = getCurrentMonthKey();
   loadMonthlyStats(monthKey);
   
-  // ✅ Спочатку скидаємо sessionStart
-  sessionStart = 0;
-  sessionActive = false;
-  
-  // ✅ Намагаємось відновити pending
-  if (loadPendingEffects()) {
-    sessionActive = true;
-    Serial.println("▶️ Відновлено активну сесію з " + String(pendingEffects.size()) + " ефектів");
-  } else {
-    // Нова сесія
-    startSession();
-  }
+  // Нова сесія (без відновлення)
+  startSession();
   
   cleanupOldStats();
 }
-String getCurrentMonthKey() {
-  timeClient.update();
-  time_t now = timeClient.getEpochTime();
-  struct tm* timeinfo = localtime(&now);
-  char buf[16];
-  sprintf(buf, "%04d_%02d", timeinfo->tm_year + 1900, timeinfo->tm_mon + 1);
-  return String(buf);
+
+// =================================================================
+// Сесії
+// =================================================================
+void startSession() {
+  if (sessionActive) return;
+  
+  uint64_t now = getUnixTime();
+  sessionStart = now;
+  sessionActive = true;
+  currentEffectName = "OFF";
+  currentEffectStartTime = now;
+  currentSessionEffects.clear();
+  
+  Serial.println("▶️ Нова сесія розпочата");
 }
 
-// ===== Завантаження/Збереження =====
+void endSession() {
+  if (!sessionActive) return;
+  
+  uint64_t now = getUnixTime();
+  uint64_t sessionDuration = now - sessionStart;
+  
+  // Завершуємо поточний ефект
+  finalizeCurrentEffect();
+  
+  // Створюємо запис сесії
+  SessionRecord session;
+  session.startTime = sessionStart;
+  session.endTime = now;
+  session.duration = sessionDuration;
+  session.effects = currentSessionEffects;
+  
+  currentStats.sessions.push_back(session);
+  currentStats.totalUptime += sessionDuration;
+  
+  // Зберігаємо
+  saveMonthlyStats();
+  
+  // Скидаємо стан
+  sessionActive = false;
+  currentSessionEffects.clear();
+  
+  Serial.println("⏹️ Сесія завершена: " + String(sessionDuration) + 
+                 " сек, " + String(session.effects.size()) + " ефектів");
+}
+
+// =================================================================
+// Ефекти
+// =================================================================
+void finalizeCurrentEffect() {
+  uint64_t now = getUnixTime();
+  uint64_t duration = now - currentEffectStartTime;
+  
+  if (duration > 0 && duration < 86400) {
+    EffectRecord rec;
+    rec.name = currentEffectName;
+    rec.startTime = currentEffectStartTime;
+    rec.duration = duration;
+    currentSessionEffects.push_back(rec);
+    
+    Serial.println("📝 Ефект: " + currentEffectName + " | " + 
+                   String(duration) + " сек");
+  }
+}
+
+void recordEffectSwitch(const String& newEffectName, bool forceSave) {
+  if (!sessionActive) return;
+  
+  // Завершуємо попередній ефект
+  finalizeCurrentEffect();
+  
+  // Починаємо новий
+  currentEffectName = newEffectName;
+  currentEffectStartTime = getUnixTime();
+  
+  // Примусове збереження
+  if (forceSave) {
+    saveMonthlyStats();
+  }
+}
+
+// =================================================================
+// Автозбереження (раз на 5 хвилин)
+// =================================================================
+void autoSaveStats() {
+  if (!sessionActive) return;
+  
+  uint64_t now = getUnixTime();
+  if (now - lastAutoSave < 300) return; // 5 хвилин
+  
+  lastAutoSave = now;
+  
+  // Просто зберігаємо файл (saveMonthlyStats сам додасть поточну сесію)
+  saveMonthlyStats();
+  
+  Serial.println("💾 Автозбереження");
+}
+// =================================================================
+// Місячна статистика
+// =================================================================
 void loadMonthlyStats(const String& month) {
   currentStats.month = month;
   currentStats.totalUptime = 0;
@@ -98,154 +202,153 @@ void loadMonthlyStats(const String& month) {
   if (!file) return;
   
   JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, file);
+  deserializeJson(doc, file);
   file.close();
   
-  if (error) {
-    Serial.println("❌ Помилка читання JSON: " + String(error.c_str()));
-    return;
-  }
-  
-  currentStats.totalUptime = doc["total_uptime"] | 0;
+  currentStats.totalUptime = doc["total_uptime"].as<uint64_t>();
   
   JsonArray sessions = doc["sessions"];
   for (JsonObject s : sessions) {
     SessionRecord session;
-    session.startTime = s["start"];
-    session.endTime = s["end"];
-    session.duration = s["duration"];
+    session.startTime = s["start"].as<uint64_t>();
+    session.endTime = s["end"].as<uint64_t>();
+    session.duration = s["duration"].as<uint64_t>();
     
     JsonArray effects = s["effects"];
     for (JsonObject e : effects) {
       EffectRecord rec;
       rec.name = e["name"].as<String>();
-      rec.startTime = e["start"];
-      rec.duration = e["duration"];
+      rec.startTime = e["start"].as<uint64_t>();
+      rec.duration = e["duration"].as<uint64_t>();
       session.effects.push_back(rec);
     }
     
     currentStats.sessions.push_back(session);
   }
   
-  Serial.println("📊 Завантажено " + String(currentStats.sessions.size()) + " сесій за " + month);
+  Serial.println("📊 Завантажено " + String(currentStats.sessions.size()) + 
+                 " сесій за " + month);
 }
 
 void saveMonthlyStats() {
   String path = "/stats/" + currentStats.month + ".json";
   File file = LittleFS.open(path, "w");
-  if (!file) {
-    Serial.println("❌ Не вдалося зберегти статистику!");
-    return;
-  }
+  if (!file) return;
   
   JsonDocument doc;
   doc["month"] = currentStats.month;
-  doc["total_uptime"] = currentStats.totalUptime;
+  doc["total_uptime"] = (uint64_t)currentStats.totalUptime;
   
   JsonArray sessions = doc["sessions"].to<JsonArray>();
+  
+  // Зберігаємо всі завершені сесії
   for (const auto& s : currentStats.sessions) {
     JsonObject sess = sessions.add<JsonObject>();
-    sess["start"] = s.startTime;
-    sess["end"] = s.endTime;
-    sess["duration"] = s.duration;
+    sess["start"] = (uint64_t)s.startTime;
+    sess["end"] = (uint64_t)s.endTime;
+    sess["duration"] = (uint64_t)s.duration;
     
     JsonArray effects = sess["effects"].to<JsonArray>();
     for (const auto& e : s.effects) {
       JsonObject eff = effects.add<JsonObject>();
       eff["name"] = e.name;
-      eff["start"] = e.startTime;
-      eff["duration"] = e.duration;
+      eff["start"] = (uint64_t)e.startTime;
+      eff["duration"] = (uint64_t)e.duration;
+    }
+  }
+  
+  // ДОДАЄМО ПОТОЧНУ СЕСІЮ (незавершену)
+  if (sessionActive) {
+    uint64_t now = getUnixTime();
+    uint64_t sessionDuration = now - sessionStart;
+    
+    // Завершуємо поточний ефект тимчасово
+    finalizeCurrentEffect();
+    
+    JsonObject sess = sessions.add<JsonObject>();
+    sess["start"] = (uint64_t)sessionStart;
+    sess["end"] = (uint64_t)now;
+    sess["duration"] = (uint64_t)sessionDuration;
+    sess["incomplete"] = true;  // Мітка що сесія не завершена
+    
+    JsonArray effects = sess["effects"].to<JsonArray>();
+    for (const auto& e : currentSessionEffects) {
+      JsonObject eff = effects.add<JsonObject>();
+      eff["name"] = e.name;
+      eff["start"] = (uint64_t)e.startTime;
+      eff["duration"] = (uint64_t)e.duration;
     }
   }
   
   serializeJson(doc, file);
   file.close();
-  Serial.println("💾 Збережено статистику за " + currentStats.month);
-  loadMonthlyStats(currentStats.month);
 }
-
-// ===== Сесії =====
-void startSession() {
-  if (sessionActive) return;
-  sessionStart = getUnixTime();
-  lastEffectSwitch = sessionStart;
-  sessionActive = true;
-  Serial.println("▶️ Сесія розпочата");
-}
-
-void endSession() {
-  if (!sessionActive) return;
-  
-  uint32_t now = getUnixTime();
-  uint32_t duration = now - sessionStart;
-  
-  // ✅ ЗАХИСТ: якщо sessionStart = 0, duration буде гігантським
-  if (sessionStart == 0 || duration > 86400) {
-    Serial.println("⚠️ sessionStart=0 або duration>доба, скидаємо duration");
-    duration = 0;
-  }
-  
-  recordEffectSwitch(currentEffectName, false);
-  
-  SessionRecord session;
-  session.startTime = sessionStart;
-  session.endTime = now;
-  session.duration = duration;
-  session.effects = pendingEffects;
-  
-  currentStats.sessions.push_back(session);
-  currentStats.totalUptime += duration;
-  
-  sessionActive = false;
-  pendingEffects.clear();
-  clearPendingEffects();
-  
-  saveMonthlyStats();
-  Serial.println("⏹️ Сесія завершена: " + String(duration) + " сек");
-}
-// ===== Ефекти =====
-void recordEffectSwitch(const String& effectName, bool forceSave) {
-  uint32_t now = getUnixTime();
-  uint32_t duration = now - lastEffectSwitch;
-  
-  if (duration > 0 && duration < 86400) {
-    EffectRecord rec;
-    rec.name = currentEffectName;
-    rec.startTime = lastEffectSwitch;
-    rec.duration = duration;
-    pendingEffects.push_back(rec);
-
-    // ✅ Зберігаємо в файл після кожного перемикання
-    savePendingEffects();
-
-  }
-  
-  currentEffectName = effectName;
-  lastEffectSwitch = now;
-  
-  if (forceSave) {
-    saveMonthlyStats();
-  }
-}
-
-// ===== API =====
+// =================================================================
+// API
+// =================================================================
 String getStatsJSON(const String& month) {
   MonthlyStats tempStats;
-  MonthlyStats* stats = &currentStats;
+  MonthlyStats* stats;
   
-  if (month != currentStats.month) {
-    loadMonthlyStats(month);
-    tempStats = currentStats;
+  if (month == currentStats.month) {
+    stats = &currentStats;
+  } else {
+    tempStats.month = month;
+    tempStats.totalUptime = 0;
+    
+    String path = "/stats/" + month + ".json";
+    if (LittleFS.exists(path)) {
+      File file = LittleFS.open(path, "r");
+      if (file) {
+        JsonDocument doc;
+        deserializeJson(doc, file);
+        file.close();
+        
+        tempStats.totalUptime = doc["total_uptime"].as<uint64_t>();
+        JsonArray sessions = doc["sessions"];
+        for (JsonObject s : sessions) {
+          SessionRecord session;
+          session.startTime = s["start"].as<uint64_t>();
+          session.endTime = s["end"].as<uint64_t>();
+          session.duration = s["duration"].as<uint64_t>();
+          
+          JsonArray effects = s["effects"];
+          for (JsonObject e : effects) {
+            EffectRecord rec;
+            rec.name = e["name"].as<String>();
+            rec.startTime = e["start"].as<uint64_t>();
+            rec.duration = e["duration"].as<uint64_t>();
+            session.effects.push_back(rec);
+          }
+          tempStats.sessions.push_back(session);
+        }
+      }
+    }
     stats = &tempStats;
-    loadMonthlyStats(currentStats.month);
   }
   
   JsonDocument doc;
   doc["month"] = stats->month;
-  doc["total_uptime"] = stats->totalUptime;
-  doc["sessions_count"] = stats->sessions.size();
+  doc["total_uptime"] = (uint64_t)stats->totalUptime;
+  doc["sessions_count"] = (int)stats->sessions.size();
   
-  std::map<String, uint32_t> effectTotals;
+  JsonArray sessions = doc["sessions"].to<JsonArray>();
+  for (const auto& s : stats->sessions) {
+    JsonObject sess = sessions.add<JsonObject>();
+    sess["start"] = (uint64_t)s.startTime;
+    sess["end"] = (uint64_t)s.endTime;
+    sess["duration"] = (uint64_t)s.duration;
+    
+    JsonArray effects = sess["effects"].to<JsonArray>();
+    for (const auto& e : s.effects) {
+      JsonObject eff = effects.add<JsonObject>();
+      eff["name"] = e.name;
+      eff["start"] = (uint64_t)e.startTime;
+      eff["duration"] = (uint64_t)e.duration;
+    }
+  }
+  
+  std::map<String, uint64_t> effectTotals;
   for (const auto& s : stats->sessions) {
     for (const auto& e : s.effects) {
       effectTotals[e.name] += e.duration;
@@ -254,7 +357,7 @@ String getStatsJSON(const String& month) {
   
   JsonObject effects = doc["effects_summary"].to<JsonObject>();
   for (const auto& pair : effectTotals) {
-    effects[pair.first] = pair.second;
+    effects[pair.first] = (uint64_t)pair.second;
   }
   
   String output;
@@ -264,178 +367,148 @@ String getStatsJSON(const String& month) {
 
 String exportCSV(const String& month) {
   MonthlyStats tempStats;
-  MonthlyStats* stats = &currentStats;
+  MonthlyStats* stats;
   
-  if (month != currentStats.month) {
-    loadMonthlyStats(month);
-    tempStats = currentStats;
+  if (month == currentStats.month) {
+    stats = &currentStats;
+  } else {
+    tempStats.month = month;
+    tempStats.totalUptime = 0;
+    String path = "/stats/" + month + ".json";
+    if (LittleFS.exists(path)) {
+      File file = LittleFS.open(path, "r");
+      if (file) {
+        JsonDocument doc;
+        deserializeJson(doc, file);
+        file.close();
+        tempStats.totalUptime = doc["total_uptime"].as<uint64_t>();
+        JsonArray sessions = doc["sessions"];
+        for (JsonObject s : sessions) {
+          SessionRecord session;
+          session.startTime = s["start"].as<uint64_t>();
+          session.endTime = s["end"].as<uint64_t>();
+          session.duration = s["duration"].as<uint64_t>();
+          JsonArray effects = s["effects"];
+          for (JsonObject e : effects) {
+            EffectRecord rec;
+            rec.name = e["name"].as<String>();
+            rec.startTime = e["start"].as<uint64_t>();
+            rec.duration = e["duration"].as<uint64_t>();
+            session.effects.push_back(rec);
+          }
+          tempStats.sessions.push_back(session);
+        }
+      }
+    }
     stats = &tempStats;
-    loadMonthlyStats(currentStats.month);
   }
   
   String csv = "Session Start,Session End,Session Duration (min),Effect Name,Effect Start,Effect Duration (min)\n";
-  
   for (const auto& s : stats->sessions) {
     for (const auto& e : s.effects) {
       csv += formatTimestamp(s.startTime) + ",";
       csv += formatTimestamp(s.endTime) + ",";
-      csv += String(s.duration / 60.0, 1) + ",";
+      csv += String((double)s.duration / 60.0, 1) + ",";
       csv += e.name + ",";
       csv += formatTimestamp(e.startTime) + ",";
-      csv += String(e.duration / 60.0, 1) + "\n";
+      csv += String((double)e.duration / 60.0, 1) + "\n";
     }
   }
-  
   return csv;
 }
 
-// ===== Очищення старих даних =====
+// =================================================================
+// Очищення
+// =================================================================
 void cleanupOldStats() {
-  timeClient.update();
-  time_t now = timeClient.getEpochTime();
-  struct tm* timeinfo = localtime(&now);
-  int currentYear = timeinfo->tm_year + 1900;
-  int currentMonth = timeinfo->tm_mon + 1;
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) return;
+  
+  int currentYear = timeinfo.tm_year + 1900;
+  int currentMonth = timeinfo.tm_mon + 1;
   
   File dir = LittleFS.open("/stats", "r");
   if (!dir) return;
   
+  std::vector<String> toDelete;
+  
   File file = dir.openNextFile();
   while (file) {
-    String name = file.name();
-    if (name.endsWith(".json")) {
-      int year = name.substring(1, 5).toInt();
-      int month = name.substring(6, 8).toInt();
+    String fullPath = file.name();
+    int lastSlash = fullPath.lastIndexOf('/');
+    String fileName = (lastSlash >= 0) ? fullPath.substring(lastSlash + 1) : fullPath;
+    
+    if (fileName.endsWith(".json") && fileName.length() >= 11) {
+      String yearStr = fileName.substring(0, 4);
+      String monthStr = fileName.substring(5, 7);
       
-      int monthsDiff = (currentYear - year) * 12 + (currentMonth - month);
-      if (monthsDiff > 24) {
-        String path = "/stats/" + name;
-        LittleFS.remove(path);
-        Serial.println("🗑️ Видалено старий файл: " + name);
+      int year = yearStr.toInt();
+      int month = monthStr.toInt();
+      
+      if (year >= 2020 && year <= 2100 && month >= 1 && month <= 12) {
+        int monthsDiff = (currentYear - year) * 12 + (currentMonth - month);
+        if (monthsDiff > 24) {
+          toDelete.push_back(fullPath);
+        }
       }
     }
     file = dir.openNextFile();
   }
-}
-
-uint32_t getTotalUptime() { return currentStats.totalUptime; }
-uint32_t getSessionDuration() { return sessionActive ? (getUnixTime() - sessionStart) : 0; }
-
-// Додай цю функцію для автозбереження статистики
-void autoSaveStats() {
-  uint32_t now = getUnixTime();
-  if (now - lastAutoSave > 300) { // Кожні 5 хвилин (300 секунд)
-    if (sessionActive && !pendingEffects.empty()) {
-      saveMonthlyStats();
-      lastAutoSave = now;
-      Serial.println("💾 Автозбереження статистики");
-    }
+  
+  for (const auto& path : toDelete) {
+    LittleFS.remove(path);
+    Serial.println("🗑️ Видалено: " + path);
   }
-}
-
-// ===== Getter-функції для відладки =====
-bool isSessionActive() {
-  return sessionActive;
-}
-
-uint32_t getPendingEffectsCount() {
-  return pendingEffects.size();
-}
-
-// ПЕРЕЙМЕНОВАНО, щоб не конфліктувати з main.cpp
-String getStatsCurrentEffectName() {
-  return currentEffectName;
-}
-
-uint32_t getCurrentTotalUptime() {
-  return currentStats.totalUptime;
-}
-
-uint32_t getCurrentSessionsCount() {
-  return currentStats.sessions.size();
-}
-
-
-// Збереження pendingEffects у файл
-void savePendingEffects() {
-  File file = LittleFS.open("/stats/pending.json", "w");
-  if (!file) return;
-  
-  JsonDocument doc;
-  JsonArray arr = doc.to<JsonArray>();
-  
-  for (const auto& e : pendingEffects) {
-    JsonObject obj = arr.add<JsonObject>();
-    obj["name"] = e.name;
-    obj["start"] = e.startTime;
-    obj["duration"] = e.duration;
-  }
-  
-  // Зберігаємо також час старту сесії
-  doc["sessionStart"] = sessionStart;
-  
-  serializeJson(doc, file);
-  file.close();
-}
-
-// Завантаження pendingEffects з файлу
-bool loadPendingEffects() {
-  File file = LittleFS.open("/stats/pending.json", "r");
-  if (!file) return false;
-  
-  JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, file);
-  file.close();
-  
-  if (error) {
-    Serial.println("❌ Помилка читання pending.json: " + String(error.c_str()));
-    return false;
-  }
-  
-  pendingEffects.clear();
-  
-  JsonArray arr = doc.as<JsonArray>();
-  for (JsonObject obj : arr) {
-    EffectRecord rec;
-    rec.name = obj["name"].as<String>();
-    rec.startTime = obj["start"].as<uint32_t>();
-    rec.duration = obj["duration"].as<uint32_t>();
-    pendingEffects.push_back(rec);
-  }
-  
-  // ✅ Відновлюємо sessionStart з останнього ефекту
-  if (!pendingEffects.empty()) {
-    sessionStart = pendingEffects[0].startTime;
-    lastEffectSwitch = pendingEffects.back().startTime + pendingEffects.back().duration;
-  }
-  
-  Serial.println("✅ Відновлено " + String(pendingEffects.size()) + " ефектів, sessionStart=" + String(sessionStart));
-  return true;
-}
-// Видалення pending файлу
-void clearPendingEffects() {
-  LittleFS.remove("/stats/pending.json");
 }
 
 void resetStats() {
   currentStats.totalUptime = 0;
   currentStats.sessions.clear();
-  pendingEffects.clear();
+  currentSessionEffects.clear();
   sessionActive = false;
   sessionStart = 0;
+  currentEffectName = "OFF";
+  currentEffectStartTime = 0;
   
-  // Видалити всі файли статистики
+  std::vector<String> toDelete;
   File dir = LittleFS.open("/stats", "r");
   if (dir) {
     File file = dir.openNextFile();
     while (file) {
-      String name = file.name();
-      String path = "/stats/" + name;
-      LittleFS.remove(path);
+      toDelete.push_back(String(file.name()));
       file = dir.openNextFile();
     }
   }
   
+  for (const auto& path : toDelete) {
+    LittleFS.remove(path);
+  }
+  
   saveMonthlyStats();
-  Serial.println("🗑️ Статистику повністю скинуто");
+  Serial.println("🗑️ Статистику скинуто");
+}
+
+// =================================================================
+// Getter-функції
+// =================================================================
+bool isSessionActive() { return sessionActive; }
+
+uint64_t getSessionDuration() {
+  if (!sessionActive || sessionStart == 0) return 0;
+  return getUnixTime() - sessionStart;
+}
+
+uint64_t getPendingEffectsCount() { 
+  return currentSessionEffects.size() + (sessionActive ? 1 : 0); 
+}
+
+String getStatsCurrentEffectName() { return currentEffectName; }
+
+uint64_t getCurrentTotalUptime() { return currentStats.totalUptime; }
+
+uint64_t getCurrentSessionsCount() { return currentStats.sessions.size(); }
+
+uint64_t getCurrentEffectDuration() {
+  if (!sessionActive) return 0;
+  return getUnixTime() - currentEffectStartTime;
 }

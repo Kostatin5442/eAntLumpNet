@@ -1,18 +1,15 @@
 /*
 Цей файл є типовим файлом для налаштування ESP32 в web режимі
-
 */
 #include "webhandlers.h"
 #include "index_html.h"
 #include "wifi_manager.h"
 #include "stats.h" 
-
-
-//ДЛя напрацювання
+//Для напрацювання (08.10.2026 змінили зі сторінки /control на /stats)
+//стара версія сторінки для керування (зараз використовується сторінка статистики)
 void handleStatsPage() {
   server.send_P(200, "text/html", STATS_PAGE_HTML);
 }
-
 void handleStatsAPI() {
   String month = server.arg("month");
   if (month.isEmpty()) month = getCurrentMonthKey();
@@ -20,7 +17,6 @@ void handleStatsAPI() {
   String json = getStatsJSON(month);
   server.send(200, "application/json", json);
 }
-
 void handleStatsCSV() {
   String month = server.arg("month");
   if (month.isEmpty()) month = getCurrentMonthKey();
@@ -121,9 +117,9 @@ void handleWifiPage() {
 // ==========================================
 // 🎛️ Обробник веб-панелі керування
 // ==========================================
-void handleControlPage() {
-  server.send_P(200, "text/html", CONTROL_PAGE_HTML);
-}
+//void handleControlPage() {
+//  server.send_P(200, "text/html", CONTROL_PAGE_HTML);
+//}
 
 // ==========================================
 // 🗑️ Скидання WiFi налаштувань (викликає clearSavedWifi з wifi_manager)
